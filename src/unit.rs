@@ -1,16 +1,16 @@
-use ordered_float::OrderedFloat;
-use std::{collections::HashMap, fmt};
-
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::{ops::Div, ops::Mul};
 pub struct Unit {
     // TODO: consider using rational numbers for exponent and strong type for the unit
-    // The string here represents a "defined unit" that is part of the registry
-    components: std::collections::HashMap<String, f64>,
+    components: std::collections::HashMap<Arc<DefinedUnit>, f64>,
 }
 
 // Dimensions are: Length, Mass, Time, ELectric Current, temperature, amount of substance, luminous intensity
 
+#[derive(Debug, Clone)]
 pub struct DefinedUnit {
-    name: String,
+    pub name: String,
     dimensions: [f64; 7],
     // TODO: this implies only "linear" units are used.
     // We probably want a more generic affine unit support, or even non-linear unit conversion scales
@@ -18,8 +18,43 @@ pub struct DefinedUnit {
     aliases: Vec<String>,
 }
 
+// Implement PartialEq and Eq based on name only
+// This is valid because name uniqueness is guaranteed elsewhere
+impl PartialEq for DefinedUnit {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for DefinedUnit {}
+
+// Implement Hash based on name only to match the equality implementation
+impl std::hash::Hash for DefinedUnit {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
+impl DefinedUnit {
+    pub fn new(
+        name: String,
+        dimensions: [f64; 7],
+        // TODO: this implies only "linear" units are used.
+        // We probably want a more generic affine unit support, or even non-linear unit conversion scales
+        scale: f64,
+        aliases: Vec<String>,
+    ) -> DefinedUnit {
+        DefinedUnit {
+            name: name,
+            dimensions: dimensions,
+            scale: scale,
+            aliases: aliases,
+        }
+    }
+}
+
 impl Unit {
-    pub fn new(units: HashMap<String, f64>) -> Unit {
+    pub fn new(units: HashMap<Arc<DefinedUnit>, f64>) -> Unit {
         if units.is_empty() {
             return Unit {
                 components: HashMap::new(),
@@ -38,7 +73,20 @@ impl Unit {
         }
     }
 
-    pub fn mul(&self, other: &Self) -> Self {
+    pub fn pow(&self, power: f64) -> Unit {
+        let components = self
+            .components
+            .iter()
+            .map(|(k, v)| (k.clone(), v * power))
+            .collect();
+        return Unit {
+            components: components,
+        };
+    }
+}
+impl Mul for Unit {
+    type Output = Self;
+    fn mul(self, other: Self) -> Self {
         // The new unit components is a sum of the units of "self" and "other"
         // This code ensures that if both units have the same components, they are summed and
         // any components that sum to zero are removed
@@ -59,8 +107,11 @@ impl Unit {
             components: component_map,
         };
     }
+}
+impl Div for Unit {
+    type Output = Self;
 
-    pub fn div(&self, other: &Self) -> Self {
+    fn div(self, other: Self) -> Self {
         // The new unit components is a sum of the units of "self" and "other"
         // This code ensures that if both units have the same components, they are summed and
         // any components that sum to zero are removed
@@ -85,42 +136,73 @@ impl Unit {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+
+    // Helper functions to create commonly used DefinedUnit instances
+    fn create_kg_unit() -> Arc<DefinedUnit> {
+        Arc::new(DefinedUnit {
+            name: "kg".to_string(),
+            dimensions: [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0], // Mass dimension
+            scale: 1.0,
+            aliases: vec![],
+        })
+    }
+
+    fn create_s_unit() -> Arc<DefinedUnit> {
+        Arc::new(DefinedUnit {
+            name: "s".to_string(),
+            dimensions: [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], // Time dimension
+            scale: 1.0,
+            aliases: vec![],
+        })
+    }
 
     #[test]
     fn test_mul_two_kg_unit() {
-        // You'd need to modify DefinedUnit to use OrderedFloat<f64> for scale
-        let kg = DefinedUnit {
-            name: "kg".to_string(),
-            dimensions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            scale: 1.0,
-            aliases: vec![],
-        };
+        let kg = create_kg_unit();
 
-        let unit_1 = Unit::new(HashMap::from([(kg.name.clone(), 1.0)]));
-        let unit_2 = Unit::new(HashMap::from([(kg.name.clone(), 1.0)]));
+        let unit_1 = Unit::new(HashMap::from([(kg.clone(), 1.0)]));
+        let unit_2 = Unit::new(HashMap::from([(kg.clone(), 1.0)]));
 
-        let unit_3 = unit_1.mul(&unit_2);
-        let kg_exponent = unit_3.components.get(&"kg".to_string());
-        assert!(kg_exponent == Some(&2.0))
+        let unit_3 = unit_1 * unit_2;
+        let kg_exponent = unit_3.components.get(&*kg);
+        assert_eq!(kg_exponent, Some(&2.0));
     }
 
     #[test]
     fn test_div_two_kg_unit() {
-        // You'd need to modify DefinedUnit to use OrderedFloat<f64> for scale
-        let kg = DefinedUnit {
-            name: "kg".to_string(),
-            dimensions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            scale: 1.0,
-            aliases: vec![],
-        };
+        let kg = create_kg_unit();
 
-        let unit_1 = Unit::new(HashMap::from([(kg.name.clone(), 1.0)]));
-        let unit_2 = Unit::new(HashMap::from([(kg.name.clone(), 1.0)]));
+        let unit_1 = Unit::new(HashMap::from([(kg.clone(), 1.0)]));
+        let unit_2 = Unit::new(HashMap::from([(kg.clone(), 1.0)]));
 
-        let unit_3 = unit_1.div(&unit_2);
-        let kg_exponent = unit_3.components.get(&"kg".to_string());
-        assert!(kg_exponent.iter().len() == 0)
+        let unit_3 = unit_1 / unit_2;
+        assert!(unit_3.components.is_empty());
+    }
+
+    #[test]
+    fn test_mul_two_different_unit() {
+        let kg = create_kg_unit();
+        let s = create_s_unit();
+
+        let unit_1 = Unit::new(HashMap::from([(kg.clone(), 1.0)]));
+        let unit_2 = Unit::new(HashMap::from([(s.clone(), 1.0)]));
+
+        let unit_3 = unit_1 * unit_2;
+        assert_eq!(unit_3.components.get(&*kg), Some(&1.0));
+        assert_eq!(unit_3.components.get(&*s), Some(&1.0));
+    }
+
+    #[test]
+    fn test_div_two_different_unit() {
+        let kg = create_kg_unit();
+        let s = create_s_unit();
+
+        let unit_1 = Unit::new(HashMap::from([(kg.clone(), 1.0)]));
+        let unit_2 = Unit::new(HashMap::from([(s.clone(), 1.0)]));
+
+        let unit_3 = unit_1 / unit_2;
+        assert_eq!(unit_3.components.get(&*kg), Some(&1.0));
+        assert_eq!(unit_3.components.get(&*s), Some(&-1.0));
     }
 }
