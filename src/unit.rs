@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::{ops::Div, ops::Mul};
 pub struct Unit {
     // TODO: consider using rational numbers for exponent and strong type for the unit
-    components: std::collections::HashMap<Arc<DefinedUnit>, f64>,
+    pub components: std::collections::HashMap<Arc<DefinedUnit>, f64>,
 }
 
 // Dimensions are: Length, Mass, Time, ELectric Current, temperature, amount of substance, luminous intensity
@@ -82,6 +82,13 @@ impl Unit {
         return Unit {
             components: components,
         };
+    }
+
+    pub fn get_exponent(&self, unit_name: &String) -> Option<f64> {
+        self.components
+            .iter()
+            .find(|(defined_unit, _)| &defined_unit.name == unit_name)
+            .map(|(_, &exponent)| exponent)
     }
 }
 impl Mul for Unit {

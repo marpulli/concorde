@@ -1,5 +1,5 @@
 use crate::unit::{DefinedUnit, Unit};
-use std::{any::Any, collections::HashMap, fmt::Error, sync::Arc};
+use std::{any::Any, collections::HashMap, fmt::Error, iter::Peekable, str::Chars, sync::Arc};
 
 // Define token types
 #[derive(Debug, PartialEq, Clone)]
@@ -11,7 +11,6 @@ enum Token {
     Power,              // "**" or "^"
     LeftParen,          // "("
     RightParen,         // ")"
-    Slash,              // "/" (when used in fractions like "1/2")
 }
 
 // Tokenizer state
@@ -50,7 +49,16 @@ impl UnitRegistry {
         }
     }
 }
-pub struct TokenizerError {}
+
+fn skip_whitespace(chars: &mut Peekable<Chars>) {
+    while let Some(&next_ch) = chars.peek() {
+        if next_ch.is_whitespace() {
+            chars.next();
+        } else {
+            break;
+        }
+    }
+}
 
 fn tokenize(input: &str) -> Result<Vec<Token>, ParserError> {
     let mut tokens = Vec::new();
@@ -58,9 +66,30 @@ fn tokenize(input: &str) -> Result<Vec<Token>, ParserError> {
 
     while let Some(&ch) = chars.peek() {
         match ch {
-            // skip whitespace
+            // Whitespace could be just formatting or could be implicit multiplication of units
             ' ' | '\t' | '\n' => {
                 chars.next();
+
+                // Check if we should insert implicit multiplication
+                // Look at the last token to see if it was a unit or closing paren
+                if let Some(last_token) = tokens.last() {
+                    match last_token {
+                        Token::Identifier(_) | Token::RightParen => {
+                            skip_whitespace(&mut chars);
+                            let next_ch = chars.peek();
+                            if let Some(&ch) = next_ch {
+                                if ch.is_alphabetic() || ch == '(' {
+                                    tokens.push(Token::Multiply);
+                                }
+                            } else {
+                                break;
+                            }
+                        }
+                        _ => {
+                            skip_whitespace(&mut chars);
+                        }
+                    }
+                }
             }
             'a'..='z' | 'A'..='Z' => {
                 let mut ident = String::new();
@@ -85,7 +114,7 @@ fn tokenize(input: &str) -> Result<Vec<Token>, ParserError> {
                         break;
                     }
                 }
-                tokens.push(Token::Number(num.parse().unwrap()))
+                tokens.push(Token::Number(num.parse().unwrap()));
             }
             '*' => {
                 chars.next();
@@ -102,15 +131,15 @@ fn tokenize(input: &str) -> Result<Vec<Token>, ParserError> {
             }
             '^' => {
                 chars.next();
-                tokens.push(Token::Power)
+                tokens.push(Token::Power);
             }
             '(' => {
                 chars.next();
-                tokens.push(Token::LeftParen)
+                tokens.push(Token::LeftParen);
             }
             ')' => {
                 chars.next();
-                tokens.push(Token::RightParen)
+                tokens.push(Token::RightParen);
             }
             _ => return Err(ParserError::TokenizerError),
         }
@@ -121,9 +150,9 @@ fn tokenize(input: &str) -> Result<Vec<Token>, ParserError> {
 #[derive(Debug)]
 pub enum ParserError {
     TokenizerError,
-    ExpectedNumber,
+    ExpectedNumber(String),
     UnknownUnit,
-    UnexpectedToken,
+    UnexpectedToken(String),
 }
 
 struct Parser {
@@ -147,25 +176,74 @@ impl Parser {
     }
 
     fn parse_exponent(&mut self) -> Result<f64, ParserError> {
-        match self.tokens.get(self.position) {
+        match self.peek() {
+            Some(Token::LeftParen) => {
+                // Parse parenthesized expression like (2/3)
+                self.advance();
+                self.parse_exponent_value()
+            }
             Some(Token::Number(n)) => {
                 let num = *n;
-                self.position += 1;
+                self.advance();
+                Ok(num)
+            }
+            other => Err(ParserError::ExpectedNumber(format!(
+                "expected number or parenthesis, got {:?}",
+                other
+            ))),
+        }
+    }
 
-                if let Some(Token::Divide) = self.tokens.get(self.position) {
-                    self.position += 1;
-                    match self.tokens.get(self.position) {
+    fn parse_exponent_value(&mut self) -> Result<f64, ParserError> {
+        // Parse the numerator
+        match self.peek() {
+            Some(Token::Number(n)) => {
+                let num = *n;
+                self.advance();
+
+                // Check if there's a division for a fraction
+                if let Some(Token::Divide) = self.peek() {
+                    self.advance();
+                    match self.peek() {
                         Some(Token::Number(d)) => {
                             let denom = *d;
-                            Ok(num / denom)
+                            self.advance();
+
+                            // Expect closing parenthesis
+                            match self.peek() {
+                                Some(Token::RightParen) => {
+                                    self.advance();
+                                    Ok(num / denom)
+                                }
+                                other => Err(ParserError::UnexpectedToken(format!(
+                                    "expected right parenthesis, got {:?}",
+                                    other
+                                ))),
+                            }
                         }
-                        _ => Err(ParserError::ExpectedNumber),
+                        other => Err(ParserError::ExpectedNumber(format!(
+                            "expected number after division, got {:?}",
+                            other
+                        ))),
                     }
                 } else {
-                    Ok(num)
+                    // Just a number in parentheses like (2)
+                    match self.peek() {
+                        Some(Token::RightParen) => {
+                            self.advance();
+                            Ok(num)
+                        }
+                        other => Err(ParserError::UnexpectedToken(format!(
+                            "expected right parenthesis, got {:?}",
+                            other
+                        ))),
+                    }
                 }
             }
-            _ => Err(ParserError::ExpectedNumber),
+            other => Err(ParserError::ExpectedNumber(format!(
+                "expected number in exponent, got {:?}",
+                other
+            ))),
         }
     }
 
@@ -189,10 +267,16 @@ impl Parser {
                         self.advance();
                         Ok(result)
                     }
-                    _ => Err(ParserError::UnexpectedToken),
+                    other => Err(ParserError::UnexpectedToken(format!(
+                        "Expected right parenthesis, got {:?}",
+                        other
+                    ))),
                 }
             }
-            _ => Err(ParserError::UnexpectedToken),
+            other => Err(ParserError::UnexpectedToken(format!(
+                "Expected name or right parenthesis, got {:?}",
+                other
+            ))),
         }
     }
 
@@ -220,19 +304,19 @@ impl Parser {
 
     fn parse_term(&mut self, registry: &UnitRegistry) -> Result<Unit, ParserError> {
         // handles ^ and )
-        let mut factor = self.parse_factor(registry)?;
-        match self.peek() {
-            Some(Token::Power) => {
-                let exponent = self.parse_exponent()?;
-                Ok(factor.pow(exponent))
-            }
-            Some(Token::RightParen) => Ok(factor),
-            _ => Err(ParserError::UnexpectedToken),
+        let factor = self.parse_factor(registry)?;
+        if let Some(Token::Power) = self.peek() {
+            self.advance();
+            let exponent = self.parse_exponent()?;
+            return Ok(factor.pow(exponent));
         }
+        Ok(factor)
     }
 }
 #[cfg(test)]
 mod test {
+    use std::ops::Not;
+
     use super::*;
 
     fn create_unit_registry() -> UnitRegistry {
@@ -242,17 +326,156 @@ mod test {
             1.0,
             vec![],
         );
-        return UnitRegistry::new(Vec::from_iter([kg_unit]));
+        let s = DefinedUnit::new(
+            "s".to_string(),
+            [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            vec![],
+        );
+        let m = DefinedUnit::new(
+            "m".to_string(),
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            vec![],
+        );
+        return UnitRegistry::new(Vec::from_iter([kg_unit, s, m]));
     }
 
     #[test]
-    fn test_parse_simple_unit() {
+    fn test_parse_integer_exponent() {
         let unit_registry = create_unit_registry();
         let unit = unit_registry.parse_string("kg**2".to_string());
+
         assert!(unit.is_ok());
         let unit = unit.unwrap();
         // Check that the unit has the correct exponent for kg
         let kg_def = unit_registry.get(&"kg".to_string()).unwrap();
-        assert_eq!(unit.units.get(&kg_def), Some(&2.0));
+        assert_eq!(unit.components.get(&kg_def), Some(&2.0));
+    }
+
+    #[test]
+    fn test_parse_decimal_exponent() {
+        let unit_registry = create_unit_registry();
+        let unit = unit_registry.parse_string("kg**2.5".to_string());
+
+        assert!(unit.is_ok());
+        let unit = unit.unwrap();
+        // Check that the unit has the correct exponent for kg
+        let kg_def = unit_registry.get(&"kg".to_string()).unwrap();
+        assert_eq!(unit.components.get(&kg_def), Some(&2.5));
+    }
+
+    #[test]
+    fn test_parse_fraction_exponent() {
+        let unit_registry = create_unit_registry();
+        let unit = unit_registry.parse_string("kg**(2/5)".to_string());
+
+        assert!(unit.is_ok());
+        let unit = unit.unwrap();
+        // Check that the unit has the correct exponent for kg
+        let kg_def = unit_registry.get(&"kg".to_string()).unwrap();
+        assert_eq!(unit.components.get(&kg_def), Some(&0.4));
+    }
+
+    #[test]
+    fn test_parse_unit_multiplication_with_asterisk() {
+        let unit_registry = create_unit_registry();
+        let unit = unit_registry.parse_string("kg * s".to_string());
+
+        assert!(unit.is_ok());
+        let unit = unit.unwrap();
+        // Check that the unit has the correct exponent for kg
+        let kg_def = unit_registry.get(&"kg".to_string()).unwrap();
+        let s_def = unit_registry.get(&"s".to_string()).unwrap();
+        assert_eq!(unit.components.get(&kg_def), Some(&1.0));
+        assert_eq!(unit.components.get(&s_def), Some(&1.0));
+        assert_eq!(unit.components.len(), 2)
+    }
+
+    #[test]
+    fn test_parse_unit_division() {
+        let unit_registry = create_unit_registry();
+        let unit = unit_registry.parse_string("kg / s".to_string());
+
+        assert!(unit.is_ok());
+        let unit = unit.unwrap();
+        // Check that the unit has the correct exponent for kg
+        let kg_def = unit_registry.get(&"kg".to_string()).unwrap();
+        let s_def = unit_registry.get(&"s".to_string()).unwrap();
+        assert_eq!(unit.components.get(&kg_def), Some(&1.0));
+        assert_eq!(unit.components.get(&s_def), Some(&-1.0));
+        assert_eq!(unit.components.len(), 2)
+    }
+
+    #[test]
+    fn test_multiplication_and_division_precedence() {
+        let unit_registry = create_unit_registry();
+        let unit = unit_registry.parse_string("kg / s * s".to_string());
+
+        assert!(unit.is_ok());
+        let unit = unit.unwrap();
+        // Check that the unit has the correct exponent for kg
+        let kg_def = unit_registry.get(&"kg".to_string()).unwrap();
+        let s_def = unit_registry.get(&"s".to_string()).unwrap();
+        assert_eq!(unit.components.get(&kg_def), Some(&1.0));
+        assert!(unit.components.contains_key(&s_def).not());
+        assert_eq!(unit.components.len(), 1)
+    }
+
+    #[test]
+    fn test_brackets() {
+        let unit_registry = create_unit_registry();
+        let unit = unit_registry.parse_string("kg / (s * s)".to_string());
+
+        assert!(unit.is_ok());
+        let unit = unit.unwrap();
+        // Check that the unit has the correct exponent for kg
+        let kg_def = unit_registry.get(&"kg".to_string()).unwrap();
+        let s_def = unit_registry.get(&"s".to_string()).unwrap();
+        assert_eq!(unit.components.get(&kg_def), Some(&1.0));
+        assert_eq!(unit.components.get(&s_def), Some(&-2.0));
+    }
+
+    #[test]
+    fn test_complex_precedence_mixed_operators() {
+        let registry = create_unit_registry();
+        let unit = registry.parse_string("kg * m^2 / s^2".to_string()).unwrap();
+        assert_eq!(unit.get_exponent(&"kg".to_string()), Some(1.0));
+        assert_eq!(unit.get_exponent(&"m".to_string()), Some(2.0));
+        assert_eq!(unit.get_exponent(&"s".to_string()), Some(-2.0));
+    }
+
+    #[test]
+    fn test_chained_exponentiation_with_fractions() {
+        let registry = create_unit_registry();
+        let unit = registry
+            .parse_string("m^(3/2) * kg^(1/3) / s^(2/3)".to_string())
+            .unwrap();
+        assert_eq!(unit.get_exponent(&"m".to_string()), Some(1.5));
+        assert_eq!(unit.get_exponent(&"kg".to_string()), Some(1.0 / 3.0));
+        assert_eq!(unit.get_exponent(&"s".to_string()), Some(-2.0 / 3.0));
+    }
+
+    #[test]
+    fn test_same_unit_multiple_times() {
+        // m^(3/2) * kg^(1/3) / s^(2/3)
+        let registry = create_unit_registry();
+        let unit = registry.parse_string("kg * kg * kg".to_string()).unwrap();
+        assert_eq!(unit.get_exponent(&"kg".to_string()), Some(3.0));
+    }
+
+    #[test]
+    fn test_same_unit_cancellation() {
+        let registry = create_unit_registry();
+        let unit = registry.parse_string("kg / kg".to_string()).unwrap();
+        assert_eq!(unit.get_exponent(&"kg".to_string()), None);
+    }
+
+    #[test]
+    fn test_implicit_multiplication() {
+        let registry = create_unit_registry();
+        let unit = registry.parse_string("kg s".to_string()).unwrap();
+        assert_eq!(unit.get_exponent(&"kg".to_string()), Some(1.0));
+        assert_eq!(unit.get_exponent(&"s".to_string()), Some(1.0));
     }
 }
