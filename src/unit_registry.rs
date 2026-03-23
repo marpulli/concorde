@@ -1,4 +1,4 @@
-use crate::pratt_parser::{self, ParserError};
+use crate::parser::{self, ParserError};
 use crate::unit::{DefinedUnit, Unit};
 use std::{collections::HashMap, sync::Arc};
 
@@ -19,7 +19,7 @@ impl UnitRegistry {
     }
 
     pub fn parse_string(&self, string: String) -> Result<Unit, ParserError> {
-        pratt_parser::parse(self, &string)
+        parser::parse(self, &string)
     }
 
     pub fn new_with_si() -> UnitRegistry {
