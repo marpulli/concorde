@@ -121,6 +121,49 @@ impl Unit {
             .find(|(defined_unit, _)| &defined_unit.name == unit_name)
             .map(|(_, &exponent)| exponent)
     }
+
+    /// Compute the overall dimensions of this compound unit.
+    /// Each component's dimensions are scaled by its exponent and summed.
+    pub fn dimensions(&self) -> [f64; 7] {
+        let mut dims = [0.0; 7];
+        for (defined_unit, &exponent) in &self.components {
+            for (i, &d) in defined_unit.dimensions.iter().enumerate() {
+                dims[i] += d * exponent;
+            }
+        }
+        dims
+    }
+
+    /// Compute the overall scale factor of this compound unit.
+    /// Each component's scale is raised to its exponent and multiplied together.
+    pub fn scale(&self) -> f64 {
+        self.components
+            .iter()
+            .map(|(defined_unit, &exponent)| defined_unit.scale.powf(exponent))
+            .product()
+    }
+
+    /// Check if two units have the same dimensions (are compatible for addition).
+    pub fn is_compatible(&self, other: &Unit) -> bool {
+        let d1 = self.dimensions();
+        let d2 = other.dimensions();
+        d1.iter()
+            .zip(d2.iter())
+            .all(|(a, b)| (a - b).abs() < 1e-12)
+    }
+
+    /// Compute the conversion factor to convert a value in `other` units to `self` units.
+    /// Returns an error if units are not dimensionally compatible.
+    /// Usage: value_in_self = value_in_other * factor
+    pub fn conversion_factor(&self, other: &Unit) -> Result<f64, IncompatibleUnitsError> {
+        if !self.is_compatible(other) {
+            return Err(IncompatibleUnitsError {
+                lhs: self.to_string(),
+                rhs: other.to_string(),
+            });
+        }
+        Ok(other.scale() / self.scale())
+    }
 }
 impl Mul for Unit {
     type Output = Self;
@@ -195,6 +238,25 @@ impl Div for Unit {
         };
     }
 }
+
+/// Error type for unit compatibility failures in addition/subtraction.
+#[derive(Debug, Clone)]
+pub struct IncompatibleUnitsError {
+    pub lhs: String,
+    pub rhs: String,
+}
+
+impl fmt::Display for IncompatibleUnitsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "cannot add/subtract incompatible units: {} and {}",
+            self.lhs, self.rhs
+        )
+    }
+}
+
+impl std::error::Error for IncompatibleUnitsError {}
 
 #[cfg(test)]
 mod tests {

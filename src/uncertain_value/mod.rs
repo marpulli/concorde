@@ -160,20 +160,6 @@ impl UncertainValue {
             }
         }
     }
-
-    /// Legacy constructor for backward compatibility
-    /// Creates an independent variable
-    #[deprecated(note = "Use new_independent instead")]
-    pub fn new_scalar(value: f64, uncertainty: f64) -> Self {
-        Self::new_independent(value, uncertainty)
-    }
-
-    /// Legacy constructor for backward compatibility
-    /// Creates an independent variable array
-    #[deprecated(note = "Use new_independent_array instead")]
-    pub fn new_array(value: NumpyArray, uncertainty: NumpyArray) -> Self {
-        Self::new_independent_array(value, uncertainty)
-    }
 }
 
 #[cfg(test)]

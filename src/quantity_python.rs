@@ -37,6 +37,18 @@ impl PyQuantity {
         }
     }
 
+    fn __add__(&self, other: &PyQuantity) -> PyResult<PyQuantity> {
+        (&self.inner + &other.inner)
+            .map(|inner| PyQuantity { inner })
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
+    fn __sub__(&self, other: &PyQuantity) -> PyResult<PyQuantity> {
+        (&self.inner - &other.inner)
+            .map(|inner| PyQuantity { inner })
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    }
+
     fn __repr__(&self) -> String {
         use crate::uncertain_value::ValueType;
         let value_str = match &self.inner.value().value {
