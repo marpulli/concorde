@@ -1,6 +1,9 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 use std::{ops::Div, ops::Mul};
+
+#[derive(Debug, Clone)]
 pub struct Unit {
     // TODO: consider using rational numbers for exponent and strong type for the unit
     pub components: std::collections::HashMap<Arc<DefinedUnit>, f64>,
@@ -11,7 +14,7 @@ pub struct Unit {
 #[derive(Debug, Clone)]
 pub struct DefinedUnit {
     pub name: String,
-    dimensions: [f64; 7],
+    pub dimensions: [f64; 7],
     // TODO: this implies only "linear" units are used.
     // We probably want a more generic affine unit support, or even non-linear unit conversion scales
     scale: f64,
@@ -50,6 +53,34 @@ impl DefinedUnit {
             scale: scale,
             aliases: aliases,
         }
+    }
+}
+
+impl fmt::Display for DefinedUnit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+impl fmt::Display for Unit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.components.is_empty() {
+            return write!(f, "dimensionless");
+        }
+
+        let mut parts: Vec<_> = self
+            .components
+            .iter()
+            .map(|(unit, &exp)| {
+                if exp == 1.0 {
+                    unit.name.clone()
+                } else {
+                    format!("{}^{}", unit.name, exp)
+                }
+            })
+            .collect();
+        parts.sort(); // deterministic output
+        write!(f, "{}", parts.join(" * "))
     }
 }
 
@@ -94,6 +125,30 @@ impl Unit {
 impl Mul for Unit {
     type Output = Self;
     fn mul(self, other: Self) -> Self {
+        // The new unit components is a sum of the units of "self" and "other"
+        // This code ensures that if both units have the same components, they are summed and
+        // any components that sum to zero are removed
+        let mut component_map = std::collections::HashMap::new();
+
+        // Add all components from both units
+        for (component, value) in &self.components {
+            *component_map.entry(component.clone()).or_insert(0.0) += value;
+        }
+        for (component, value) in &other.components {
+            *component_map.entry(component.clone()).or_insert(0.0) += value;
+        }
+
+        // filter out zeros
+        component_map.retain(|_, &mut v| v != 0.0);
+
+        return Unit {
+            components: component_map,
+        };
+    }
+}
+impl Mul for &Unit {
+    type Output = Unit;
+    fn mul(self, other: &Unit) -> Unit {
         // The new unit components is a sum of the units of "self" and "other"
         // This code ensures that if both units have the same components, they are summed and
         // any components that sum to zero are removed

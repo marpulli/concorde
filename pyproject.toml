@@ -1,0 +1,36 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "concorde"
+version = "0.1.0"
+description = "A Python package for physical quantities with units and uncertainties"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+dependencies = [
+    "numpy>=1.20.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[tool.maturin]
+python-source = "python"
+module-name = "concorde._concorde"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[dependency-groups]
+dev = [
+    "ipython>=8.12.3",
+    "pytest>=8.3.5",
+]
