@@ -1,6 +1,6 @@
 use crate::uncertain_value::UncertainValue;
 use crate::unit::{IncompatibleUnitsError, Unit};
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Add, Div, Mul, Sub};
 
 // Marker trait for types that can be used in Quantity
 // This is a simple marker - the actual multiplication constraints
@@ -93,6 +93,24 @@ where
             value: &self.value - &converted,
             unit: self.unit.clone(),
         })
+    }
+}
+
+// Can divide two quantities
+impl<T, U, Output> Div<&Quantity<U>> for &Quantity<T>
+where
+    T: QuantityValue,
+    U: QuantityValue,
+    for<'a, 'b> &'a T: Div<&'b U, Output = Output>,
+    Output: QuantityValue,
+{
+    type Output = Quantity<Output>;
+
+    fn div(self, other: &Quantity<U>) -> Self::Output {
+        Quantity {
+            value: &self.value / &other.value,
+            unit: &self.unit / &other.unit,
+        }
     }
 }
 

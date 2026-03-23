@@ -40,13 +40,19 @@ impl PyQuantity {
     fn __add__(&self, other: &PyQuantity) -> PyResult<PyQuantity> {
         (&self.inner + &other.inner)
             .map(|inner| PyQuantity { inner })
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+            .map_err(|e| crate::IncompatibleUnitError::new_err(e.to_string()))
     }
 
     fn __sub__(&self, other: &PyQuantity) -> PyResult<PyQuantity> {
         (&self.inner - &other.inner)
             .map(|inner| PyQuantity { inner })
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+            .map_err(|e| crate::IncompatibleUnitError::new_err(e.to_string()))
+    }
+
+    fn __truediv__(&self, other: &PyQuantity) -> PyQuantity {
+        PyQuantity {
+            inner: &self.inner / &other.inner,
+        }
     }
 
     fn __repr__(&self) -> String {

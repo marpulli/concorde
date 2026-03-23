@@ -239,6 +239,27 @@ impl Div for Unit {
     }
 }
 
+impl Div for &Unit {
+    type Output = Unit;
+
+    fn div(self, other: &Unit) -> Unit {
+        let mut component_map = std::collections::HashMap::new();
+
+        for (component, value) in &self.components {
+            *component_map.entry(component.clone()).or_insert(0.0) += value;
+        }
+        for (component, value) in &other.components {
+            *component_map.entry(component.clone()).or_insert(0.0) -= value;
+        }
+
+        component_map.retain(|_, v| v.abs() > 1e-12);
+
+        Unit {
+            components: component_map,
+        }
+    }
+}
+
 /// Error type for unit compatibility failures in addition/subtraction.
 #[derive(Debug, Clone)]
 pub struct IncompatibleUnitsError {
