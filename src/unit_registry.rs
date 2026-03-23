@@ -1,10 +1,13 @@
 use crate::parser::{self, ParserError};
 use crate::unit::{DefinedUnit, Unit};
+use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 
 pub struct UnitRegistry {
     defined_units: HashMap<String, Arc<DefinedUnit>>,
     aliases: HashMap<String, String>,
+    /// Parse cache: maps input string → parsed Unit (interior-mutable for &self API)
+    parse_cache: Mutex<HashMap<String, Unit>>,
 }
 
 impl UnitRegistry {
@@ -15,11 +18,21 @@ impl UnitRegistry {
                 .map(|f| (f.name.clone(), Arc::new(f)))
                 .collect(),
             aliases: HashMap::new(),
+            parse_cache: Mutex::new(HashMap::new()),
         }
     }
 
     pub fn parse_string(&self, string: String) -> Result<Unit, ParserError> {
-        parser::parse(self, &string)
+        // Fast-path: check cache first
+        {
+            let cache = self.parse_cache.lock().unwrap();
+            if let Some(unit) = cache.get(&string) {
+                return Ok(unit.clone());
+            }
+        }
+        let unit = parser::parse(self, &string)?;
+        self.parse_cache.lock().unwrap().insert(string, unit.clone());
+        Ok(unit)
     }
 
     pub fn new_with_si() -> UnitRegistry {
@@ -72,6 +85,8 @@ impl UnitRegistry {
 
     pub fn define_unit(&mut self, unit: DefinedUnit) {
         self.defined_units.insert(unit.name.clone(), Arc::new(unit));
+        // Invalidate parse cache since new units may affect existing parses
+        self.parse_cache.lock().unwrap().clear();
     }
 
     pub fn get(&self, name: &String) -> Option<Arc<DefinedUnit>> {
