@@ -1,0 +1,81 @@
+# Unit definitions for concorde
+# Dimensions are: [Length, Mass, Time, Electric Current, Temperature, Amount of Substance, Luminous Intensity]
+#
+# Units can be defined in two ways:
+#
+# 1. Base unit — specify dimensions directly:
+#    [[unit]]
+#    name = "m"
+#    dimensions = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+#
+# 2. Derived unit — reference already-defined units:
+#    [[unit]]
+#    name = "km"
+#    unit = "m"
+#    scale = 1000.0
+#
+# Fields:
+#   name        (required)  Unique identifier for the unit
+#   dimensions  (option 1)  Raw SI dimension exponents [L, M, T, I, Θ, N, J]
+#   unit        (option 2)  Expression referencing existing units (e.g. "kg * m / s^2")
+#   scale       (optional)  Scale factor relative to base SI (default: 1.0)
+#   aliases     (optional)  Alternative names (default: [])
+#
+# Derived units are resolved in order, so a unit can only reference
+# units defined above it in this file (or already in the registry).
+
+# --- Derived SI units ---
+
+[[unit]]
+name = "N"
+unit = "kg * m / s^2"
+aliases = ["newton", "newtons"]
+
+[[unit]]
+name = "J"
+unit = "N * m"
+aliases = ["joule", "joules"]
+
+[[unit]]
+name = "W"
+unit = "J / s"
+aliases = ["watt", "watts"]
+
+[[unit]]
+name = "Pa"
+unit = "N / m^2"
+aliases = ["pascal", "pascals"]
+
+# --- Length (non-SI) ---
+
+[[unit]]
+name = "km"
+unit = "m"
+scale = 1000.0
+aliases = ["kilometer", "kilometers"]
+
+[[unit]]
+name = "cm"
+unit = "m"
+scale = 0.01
+aliases = ["centimeter", "centimeters"]
+
+[[unit]]
+name = "mm"
+unit = "m"
+scale = 0.001
+aliases = ["millimeter", "millimeters"]
+
+# --- Time ---
+
+[[unit]]
+name = "min"
+unit = "s"
+scale = 60.0
+aliases = ["minute", "minutes"]
+
+[[unit]]
+name = "hr"
+unit = "s"
+scale = 3600.0
+aliases = ["hour", "hours"]

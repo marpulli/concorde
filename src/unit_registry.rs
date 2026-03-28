@@ -1,5 +1,6 @@
 use crate::parser::{self, ParserError};
 use crate::unit::{DefinedUnit, Unit};
+use serde::Deserialize;
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 
@@ -31,7 +32,10 @@ impl UnitRegistry {
             }
         }
         let unit = parser::parse(self, &string)?;
-        self.parse_cache.lock().unwrap().insert(string, unit.clone());
+        self.parse_cache
+            .lock()
+            .unwrap()
+            .insert(string, unit.clone());
         Ok(unit)
     }
 

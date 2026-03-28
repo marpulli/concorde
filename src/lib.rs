@@ -6,6 +6,7 @@ mod uncertain_value;
 mod unit;
 mod unit_python;
 mod unit_registry;
+mod unit_file_parser;
 
 use pyo3::prelude::*;
 use uncertain_value::PyUncertainValue;

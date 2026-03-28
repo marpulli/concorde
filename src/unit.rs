@@ -17,7 +17,7 @@ pub struct DefinedUnit {
     pub dimensions: [f64; 7],
     // TODO: this implies only "linear" units are used.
     // We probably want a more generic affine unit support, or even non-linear unit conversion scales
-    scale: f64,
+    pub scale: f64,
     aliases: Vec<String>,
 }
 
@@ -147,9 +147,7 @@ impl Unit {
     pub fn is_compatible(&self, other: &Unit) -> bool {
         let d1 = self.dimensions();
         let d2 = other.dimensions();
-        d1.iter()
-            .zip(d2.iter())
-            .all(|(a, b)| (a - b).abs() < 1e-12)
+        d1.iter().zip(d2.iter()).all(|(a, b)| (a - b).abs() < 1e-12)
     }
 
     /// Compute the conversion factor to convert a value in `other` units to `self` units.
