@@ -165,34 +165,13 @@ impl Mul<&UncertainValue> for &UncertainValue {
     type Output = UncertainValue;
 
     fn mul(self, other: &UncertainValue) -> Self::Output {
-        match self.uncertainty() {
-            ValueType::Scalar(s) => println!("Self: {s}"),
-            _ => (),
-        }
-
-        match other.uncertainty() {
-            ValueType::Scalar(s) => println!("Other: {s}"),
-            _ => (),
-        }
-
-        let res = binary_op(
+        binary_op(
             self,
             other,
             |a, b| mul_value_types(a, b), // z = a * b
             |_a, b| b.clone(),            // ∂z/∂a = b
             |a, _b| a.clone(),            // ∂z/∂b = a
-        );
-        match res.uncertainty() {
-            ValueType::Scalar(s) => println!("Result: {s}"),
-            _ => (),
-        }
-        for (k, v) in res.derivatives.iter() {
-            match v {
-                ValueType::Scalar(s) => println!("{k}: {s}"),
-                _ => (),
-            }
-        }
-        res
+        )
     }
 }
 
