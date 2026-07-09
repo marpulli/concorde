@@ -13,6 +13,23 @@ impl QuantityValue for f64 {}
 // Implement for UncertainValue
 impl QuantityValue for UncertainValue {}
 
+/// Types that support raising to a scalar power.
+pub trait Powf {
+    fn powf(&self, n: f64) -> Self;
+}
+
+impl Powf for f64 {
+    fn powf(&self, n: f64) -> f64 {
+        f64::powf(*self, n)
+    }
+}
+
+impl Powf for UncertainValue {
+    fn powf(&self, n: f64) -> UncertainValue {
+        self.pow(n)
+    }
+}
+
 pub struct Quantity<T>
 where
     T: QuantityValue,
@@ -51,6 +68,19 @@ where
             value: &self.value * factor,
             unit: target.clone(),
         })
+    }
+}
+
+impl<T> Quantity<T>
+where
+    T: QuantityValue + Powf,
+{
+    /// Raise both the value and the unit to a scalar power.
+    pub fn pow(&self, n: f64) -> Quantity<T> {
+        Quantity {
+            value: self.value.powf(n),
+            unit: self.unit.pow(n),
+        }
     }
 }
 
@@ -333,5 +363,30 @@ mod tests {
 
         let d = Quantity::new(UncertainValue::new_independent(1.5, 0.1), km);
         assert!(d.to(&s).is_err());
+    }
+
+    #[test]
+    fn test_quantity_pow() {
+        use crate::uncertain_value::ValueType;
+        use crate::unit::DefinedUnit;
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        let m_unit = Arc::new(DefinedUnit::new(
+            "m".to_string(),
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            vec![],
+        ));
+        let m = Unit::new(HashMap::from([(m_unit, 1.0)]));
+
+        let length = Quantity::new(UncertainValue::new_independent(3.0, 0.3), m);
+        let area = length.pow(2.0);
+
+        match &area.value().value {
+            ValueType::Scalar(v) => assert_eq!(*v, 9.0),
+            _ => panic!("Expected scalar value"),
+        }
+        assert_eq!(area.unit().get_exponent(&"m".to_string()), Some(2.0));
     }
 }

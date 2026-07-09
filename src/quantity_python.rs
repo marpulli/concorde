@@ -62,6 +62,17 @@ impl PyQuantity {
             .map_err(|e| crate::IncompatibleUnitError::new_err(e.to_string()))
     }
 
+    fn __pow__(&self, n: f64, modulo: Option<&Bound<'_, PyAny>>) -> PyResult<PyQuantity> {
+        if modulo.is_some() {
+            return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                "pow() with modulo is not supported for Quantity",
+            ));
+        }
+        Ok(PyQuantity {
+            inner: self.inner.pow(n),
+        })
+    }
+
     fn __repr__(&self) -> String {
         use crate::uncertain_value::ValueType;
         let value_str = match &self.inner.value().value {
