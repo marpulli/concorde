@@ -243,16 +243,12 @@ impl PyUncertainValue {
     /// String representation of the uncertain value
     fn __repr__(&self) -> PyResult<String> {
         let unc = self.inner.uncertainty();
-        let var_id_str = match self.inner.variable_id {
-            Some(id) => format!(" [var_id={}]", id),
-            None => String::new(),
-        };
 
         Ok(match (&self.inner.value, &unc) {
             (ValueType::Scalar(v), ValueType::Scalar(u)) => {
-                format!("UncertainValue({} ± {}{})", v, u, var_id_str)
+                format!("UncertainValue({} ± {})", v, u)
             }
-            _ => format!("UncertainValue(array(...) ± array(...){})", var_id_str),
+            _ => "UncertainValue(array(...) ± array(...))".to_string(),
         })
     }
 }
