@@ -38,6 +38,22 @@ where
     }
 }
 
+impl<T> Quantity<T>
+where
+    T: QuantityValue,
+    for<'a> &'a T: Mul<f64, Output = T>,
+{
+    /// Convert this quantity to an equivalent value expressed in `target` units.
+    /// Returns an error if `target` is not dimensionally compatible.
+    pub fn to(&self, target: &Unit) -> Result<Quantity<T>, IncompatibleUnitsError> {
+        let factor = target.conversion_factor(&self.unit)?;
+        Ok(Quantity {
+            value: &self.value * factor,
+            unit: target.clone(),
+        })
+    }
+}
+
 // Can multiply two quantities together
 impl<T, U, Output> Mul<&Quantity<U>> for &Quantity<T>
 where
@@ -240,5 +256,82 @@ mod tests {
             ValueType::Scalar(u) => assert_eq!(u, 1.0),
             _ => panic!("Expected scalar uncertainty"),
         }
+    }
+
+    fn km_and_m_units() -> (Unit, Unit) {
+        use crate::unit::DefinedUnit;
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        let m_unit = Arc::new(DefinedUnit::new(
+            "m".to_string(),
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            vec![],
+        ));
+        let km_unit = Arc::new(DefinedUnit::new(
+            "km".to_string(),
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            1000.0,
+            vec![],
+        ));
+
+        let m = Unit::new(HashMap::from([(m_unit, 1.0)]));
+        let km = Unit::new(HashMap::from([(km_unit, 1.0)]));
+        (km, m)
+    }
+
+    #[test]
+    fn test_to_converts_scalar_value_and_uncertainty() {
+        use crate::uncertain_value::ValueType;
+
+        let (km, m) = km_and_m_units();
+        let d = Quantity::new(UncertainValue::new_independent(1.5, 0.1), km);
+
+        let converted = d.to(&m).unwrap();
+
+        match &converted.value().value {
+            ValueType::Scalar(v) => assert_eq!(*v, 1500.0),
+            _ => panic!("Expected scalar value"),
+        }
+        match converted.value().uncertainty() {
+            ValueType::Scalar(u) => assert!((u - 100.0).abs() < 1e-10),
+            _ => panic!("Expected scalar uncertainty"),
+        }
+        assert_eq!(converted.unit().to_string(), "m");
+    }
+
+    #[test]
+    fn test_to_round_trip() {
+        use crate::uncertain_value::ValueType;
+
+        let (km, m) = km_and_m_units();
+        let d = Quantity::new(UncertainValue::new_independent(1.5, 0.1), km.clone());
+
+        let round_tripped = d.to(&m).unwrap().to(&km).unwrap();
+
+        match &round_tripped.value().value {
+            ValueType::Scalar(v) => assert!((v - 1.5).abs() < 1e-10),
+            _ => panic!("Expected scalar value"),
+        }
+    }
+
+    #[test]
+    fn test_to_incompatible_units_errors() {
+        use crate::unit::DefinedUnit;
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        let (km, _) = km_and_m_units();
+        let s_unit = Arc::new(DefinedUnit::new(
+            "s".to_string(),
+            [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            vec![],
+        ));
+        let s = Unit::new(HashMap::from([(s_unit, 1.0)]));
+
+        let d = Quantity::new(UncertainValue::new_independent(1.5, 0.1), km);
+        assert!(d.to(&s).is_err());
     }
 }

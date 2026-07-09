@@ -55,6 +55,13 @@ impl PyQuantity {
         }
     }
 
+    fn to(&self, unit: &PyUnit) -> PyResult<PyQuantity> {
+        self.inner
+            .to(&unit.inner)
+            .map(|inner| PyQuantity { inner })
+            .map_err(|e| crate::IncompatibleUnitError::new_err(e.to_string()))
+    }
+
     fn __repr__(&self) -> String {
         use crate::uncertain_value::ValueType;
         let value_str = match &self.inner.value().value {

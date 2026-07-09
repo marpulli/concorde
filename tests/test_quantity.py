@@ -146,6 +146,48 @@ class TestQuantityArithmetic:
         assert result.unit.get_exponent("m") is None
 
 
+class TestQuantityConversion:
+    """Tests for Quantity.to() unit conversion."""
+
+    def _km_and_m(self):
+        reg = UnitRegistry()
+        reg.define_unit("km", [1, 0, 0, 0, 0, 0, 0], 1000.0)
+        km = reg.parse("km")
+        m = reg.parse("m")
+        return km, m
+
+    def test_to_converts_scalar_value(self):
+        km, m = self._km_and_m()
+        d = Quantity(UncertainValue(1.5, 0.1), km)
+
+        converted = d.to(m)
+        assert converted.value.value == 1500.0
+        assert converted.unit.get_exponent("m") == 1.0
+
+    def test_to_converts_uncertainty(self):
+        km, m = self._km_and_m()
+        d = Quantity(UncertainValue(1.5, 0.1), km)
+
+        converted = d.to(m)
+        assert abs(converted.value.uncertainty - 100.0) < 1e-10
+
+    def test_to_incompatible_units_raises(self):
+        km, m = self._km_and_m()
+        reg = UnitRegistry()
+        s = reg.parse("s")
+
+        d = Quantity(UncertainValue(1.5, 0.1), km)
+        with pytest.raises(IncompatibleUnitError):
+            d.to(s)
+
+    def test_to_round_trip(self):
+        km, m = self._km_and_m()
+        d = Quantity(UncertainValue(1.5, 0.1), km)
+
+        round_tripped = d.to(m).to(km)
+        assert abs(round_tripped.value.value - 1.5) < 1e-10
+
+
 class TestQuantityRepr:
     """Tests for Quantity string representation."""
 
