@@ -1,6 +1,6 @@
 use crate::uncertain_value::UncertainValue;
 use crate::unit::{IncompatibleUnitsError, Unit};
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 // Marker trait for types that can be used in Quantity
 // This is a simple marker - the actual multiplication constraints
@@ -13,6 +13,7 @@ impl QuantityValue for f64 {}
 // Implement for UncertainValue
 impl QuantityValue for UncertainValue {}
 
+#[derive(Debug)]
 pub struct Quantity<T>
 where
     T: QuantityValue,
@@ -143,6 +144,32 @@ where
             value: &self.value * other,
             unit: self.unit.clone(),
         }
+    }
+}
+
+// Can negate a quantity
+impl<T> Neg for &Quantity<T>
+where
+    T: QuantityValue,
+    for<'a> &'a T: Neg<Output = T>,
+{
+    type Output = Quantity<T>;
+
+    fn neg(self) -> Self::Output {
+        Quantity {
+            value: -&self.value,
+            unit: self.unit.clone(),
+        }
+    }
+}
+
+/// Equal when both the unit and the value match.
+impl<T> PartialEq for Quantity<T>
+where
+    T: QuantityValue + PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.unit == other.unit && self.value == other.value
     }
 }
 
@@ -281,6 +308,34 @@ mod tests {
         (km, m)
     }
 
+    fn kg_unit() -> Unit {
+        use crate::unit::DefinedUnit;
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        let kg_unit = Arc::new(DefinedUnit::new(
+            "kg".to_string(),
+            [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            vec![],
+        ));
+        Unit::new(HashMap::from([(kg_unit, 1.0)]))
+    }
+
+    fn m_unit() -> Unit {
+        use crate::unit::DefinedUnit;
+        use std::collections::HashMap;
+        use std::sync::Arc;
+
+        let m_unit = Arc::new(DefinedUnit::new(
+            "m".to_string(),
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            vec![],
+        ));
+        Unit::new(HashMap::from([(m_unit, 1.0)]))
+    }
+
     #[test]
     fn test_to_converts_scalar_value_and_uncertainty() {
         use crate::uncertain_value::ValueType;
@@ -333,5 +388,43 @@ mod tests {
 
         let d = Quantity::new(UncertainValue::new_independent(1.5, 0.1), km);
         assert!(d.to(&s).is_err());
+    }
+
+    #[test]
+    fn test_negate_quantity() {
+        use crate::uncertain_value::ValueType;
+
+        let q = Quantity::new(UncertainValue::new_independent(5.0, 0.5), kg_unit());
+        let negated = -&q;
+
+        match &negated.value().value {
+            ValueType::Scalar(v) => assert_eq!(*v, -5.0),
+            _ => panic!("Expected scalar value"),
+        }
+        match negated.value().uncertainty() {
+            ValueType::Scalar(u) => assert_eq!(u, 0.5),
+            _ => panic!("Expected scalar uncertainty"),
+        }
+    }
+
+    #[test]
+    fn test_quantities_equal() {
+        let a = Quantity::new(UncertainValue::new_independent(5.0, 0.5), kg_unit());
+        let b = Quantity::new(UncertainValue::new_independent(5.0, 0.5), kg_unit());
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_quantities_not_equal_different_value() {
+        let a = Quantity::new(UncertainValue::new_independent(5.0, 0.5), kg_unit());
+        let b = Quantity::new(UncertainValue::new_independent(6.0, 0.5), kg_unit());
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn test_quantities_not_equal_different_unit() {
+        let a = Quantity::new(UncertainValue::new_independent(5.0, 0.5), kg_unit());
+        let b = Quantity::new(UncertainValue::new_independent(5.0, 0.5), m_unit());
+        assert_ne!(a, b);
     }
 }

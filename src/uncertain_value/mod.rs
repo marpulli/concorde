@@ -62,6 +62,15 @@ impl Sum for ValueType {
     }
 }
 
+impl PartialEq for ValueType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ValueType::Scalar(a), ValueType::Scalar(b)) => a == b,
+            _ => self.to_array() == other.to_array(),
+        }
+    }
+}
+
 /// For example: x - x = 0 ± 0 (not sqrt(2) * uncertainty as naive propagation gives)
 /// - Uncertainty is computed via: σ² = Σᵢ (∂f/∂xᵢ)² σᵢ²
 #[derive(Debug, Clone)]
@@ -80,6 +89,14 @@ pub struct UncertainValue {
     /// Maps: variable_id -> σ (standard uncertainty)
     /// Shared across all values derived from the same sources
     source_uncertainties: HashMap<VarId, ValueType>,
+}
+
+/// Equal when the central value and propagated uncertainty match, regardless of
+/// which independent variables they were derived from.
+impl PartialEq for UncertainValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value && self.uncertainty() == other.uncertainty()
+    }
 }
 
 impl UncertainValue {
