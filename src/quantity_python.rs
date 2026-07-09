@@ -1,6 +1,7 @@
 use crate::quantity::Quantity;
 use crate::uncertain_value::{PyUncertainValue, UncertainValue};
 use crate::unit_python::PyUnit;
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
 #[pyclass(name = "Quantity")]
@@ -11,10 +12,20 @@ pub struct PyQuantity {
 #[pymethods]
 impl PyQuantity {
     #[new]
-    fn new(value: &PyUncertainValue, unit: &PyUnit) -> Self {
-        PyQuantity {
-            inner: Quantity::new(value.inner.clone(), unit.inner.clone()),
-        }
+    fn new(value: &Bound<'_, PyAny>, unit: &PyUnit) -> PyResult<Self> {
+        let value = if let Ok(uv) = value.extract::<PyRef<PyUncertainValue>>() {
+            uv.inner.clone()
+        } else if let Ok(scalar) = value.extract::<f64>() {
+            UncertainValue::new_independent(scalar, 0.0)
+        } else {
+            return Err(PyTypeError::new_err(
+                "value must be an UncertainValue or a float",
+            ));
+        };
+
+        Ok(PyQuantity {
+            inner: Quantity::new(value, unit.inner.clone()),
+        })
     }
 
     #[getter]
@@ -31,9 +42,25 @@ impl PyQuantity {
         }
     }
 
-    fn __mul__(&self, other: &PyQuantity) -> PyQuantity {
+    fn __mul__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyQuantity> {
+        if let Ok(other) = other.extract::<PyRef<PyQuantity>>() {
+            Ok(PyQuantity {
+                inner: &self.inner * &other.inner,
+            })
+        } else if let Ok(scalar) = other.extract::<f64>() {
+            Ok(PyQuantity {
+                inner: &self.inner * scalar,
+            })
+        } else {
+            Err(PyTypeError::new_err(
+                "unsupported operand type for *: expected Quantity or float",
+            ))
+        }
+    }
+
+    fn __rmul__(&self, scalar: f64) -> PyQuantity {
         PyQuantity {
-            inner: &self.inner * &other.inner,
+            inner: &self.inner * scalar,
         }
     }
 
@@ -49,9 +76,19 @@ impl PyQuantity {
             .map_err(|e| crate::IncompatibleUnitError::new_err(e.to_string()))
     }
 
-    fn __truediv__(&self, other: &PyQuantity) -> PyQuantity {
-        PyQuantity {
-            inner: &self.inner / &other.inner,
+    fn __truediv__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyQuantity> {
+        if let Ok(other) = other.extract::<PyRef<PyQuantity>>() {
+            Ok(PyQuantity {
+                inner: &self.inner / &other.inner,
+            })
+        } else if let Ok(scalar) = other.extract::<f64>() {
+            Ok(PyQuantity {
+                inner: &self.inner * (1.0 / scalar),
+            })
+        } else {
+            Err(PyTypeError::new_err(
+                "unsupported operand type for /: expected Quantity or float",
+            ))
         }
     }
 
@@ -60,6 +97,16 @@ impl PyQuantity {
             .to(&unit.inner)
             .map(|inner| PyQuantity { inner })
             .map_err(|e| crate::IncompatibleUnitError::new_err(e.to_string()))
+    }
+
+    fn __neg__(&self) -> PyQuantity {
+        PyQuantity {
+            inner: -&self.inner,
+        }
+    }
+
+    fn __eq__(&self, other: &PyQuantity) -> bool {
+        self.inner == other.inner
     }
 
     fn __repr__(&self) -> String {

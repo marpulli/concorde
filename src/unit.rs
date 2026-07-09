@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::{ops::Div, ops::Mul};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Unit {
     // TODO: consider using rational numbers for exponent and strong type for the unit
     pub components: std::collections::HashMap<Arc<DefinedUnit>, f64>,
