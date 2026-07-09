@@ -1,4 +1,5 @@
 use crate::unit::{DefinedUnit, Unit};
+use crate::unit_file_parser;
 use crate::unit_registry::UnitRegistry;
 use pyo3::prelude::*;
 use std::collections::HashMap;
@@ -115,5 +116,15 @@ impl PyUnitRegistry {
         );
         self.inner.define_unit(unit);
         Ok(())
+    }
+
+    fn load_definitions(&mut self, path: &str) -> PyResult<usize> {
+        unit_file_parser::load_from_file(&mut self.inner, path)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))
+    }
+
+    fn load_definitions_from_string(&mut self, toml_str: &str) -> PyResult<usize> {
+        unit_file_parser::load_from_string(&mut self.inner, toml_str)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))
     }
 }
