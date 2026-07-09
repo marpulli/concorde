@@ -1,6 +1,5 @@
 use crate::parser::{self, ParserError};
 use crate::unit::{DefinedUnit, Unit};
-use serde::Deserialize;
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 
