@@ -13,3 +13,4 @@ ordered-float = "5.1.0"
 pyo3 = { version = "0.27", features = ["extension-module"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+uuid = { version = "1.23.0", features = ["v7"] }

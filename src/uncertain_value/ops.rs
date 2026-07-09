@@ -39,7 +39,11 @@ where
 
     // Merge source uncertainties from both operands
     let mut source_uncertainties = a.source_uncertainties.clone();
-    source_uncertainties.extend(b.source_uncertainties.iter());
+    source_uncertainties.extend(
+        b.source_uncertainties()
+            .iter()
+            .map(|(k, v)| (*k, v.clone())),
+    );
 
     // Compute derivatives using chain rule: ∂z/∂x = (∂f/∂a)(∂a/∂x) + (∂f/∂b)(∂b/∂x)
     let mut new_derivatives: HashMap<VarId, ValueType> = HashMap::new();
@@ -86,9 +90,7 @@ where
 fn mul_value_types(a: &ValueType, b: &ValueType) -> ValueType {
     match (a, b) {
         (ValueType::Scalar(x), ValueType::Scalar(y)) => ValueType::Scalar(x * y),
-        (ValueType::Array(x), ValueType::Array(y)) => ValueType::Array((x * y).into()),
-        (ValueType::Scalar(x), ValueType::Array(y)) => ValueType::Array((y * *x).into()),
-        (ValueType::Array(x), ValueType::Scalar(y)) => ValueType::Array((x * *y).into()),
+        (l, r) => ValueType::Array(l.to_array() * r.to_array()),
     }
 }
 
@@ -96,9 +98,7 @@ fn mul_value_types(a: &ValueType, b: &ValueType) -> ValueType {
 fn add_value_types(a: &ValueType, b: &ValueType) -> ValueType {
     match (a, b) {
         (ValueType::Scalar(x), ValueType::Scalar(y)) => ValueType::Scalar(x + y),
-        (ValueType::Array(x), ValueType::Array(y)) => ValueType::Array((x + y).into()),
-        (ValueType::Scalar(x), ValueType::Array(y)) => ValueType::Array((y + *x).into()),
-        (ValueType::Array(x), ValueType::Scalar(y)) => ValueType::Array((x + *y).into()),
+        (l, r) => ValueType::Array(l.to_array() + r.to_array()),
     }
 }
 
@@ -106,9 +106,7 @@ fn add_value_types(a: &ValueType, b: &ValueType) -> ValueType {
 fn sub_value_types(a: &ValueType, b: &ValueType) -> ValueType {
     match (a, b) {
         (ValueType::Scalar(x), ValueType::Scalar(y)) => ValueType::Scalar(x - y),
-        (ValueType::Array(x), ValueType::Array(y)) => ValueType::Array((x - y).into()),
-        (ValueType::Scalar(x), ValueType::Array(y)) => ValueType::Array((*x - y).into()),
-        (ValueType::Array(x), ValueType::Scalar(y)) => ValueType::Array((x - *y).into()),
+        (l, r) => ValueType::Array(l.to_array() - r.to_array()),
     }
 }
 
@@ -116,9 +114,7 @@ fn sub_value_types(a: &ValueType, b: &ValueType) -> ValueType {
 fn div_value_types(a: &ValueType, b: &ValueType) -> ValueType {
     match (a, b) {
         (ValueType::Scalar(x), ValueType::Scalar(y)) => ValueType::Scalar(x / y),
-        (ValueType::Array(x), ValueType::Array(y)) => ValueType::Array((x / y).into()),
-        (ValueType::Scalar(x), ValueType::Array(y)) => ValueType::Array((*x / y).into()),
-        (ValueType::Array(x), ValueType::Scalar(y)) => ValueType::Array((x / *y).into()),
+        (l, r) => ValueType::Array(l.to_array() / r.to_array()),
     }
 }
 
@@ -169,13 +165,34 @@ impl Mul<&UncertainValue> for &UncertainValue {
     type Output = UncertainValue;
 
     fn mul(self, other: &UncertainValue) -> Self::Output {
-        binary_op(
+        match self.uncertainty() {
+            ValueType::Scalar(s) => println!("Self: {s}"),
+            _ => (),
+        }
+
+        match other.uncertainty() {
+            ValueType::Scalar(s) => println!("Other: {s}"),
+            _ => (),
+        }
+
+        let res = binary_op(
             self,
             other,
             |a, b| mul_value_types(a, b), // z = a * b
             |_a, b| b.clone(),            // ∂z/∂a = b
             |a, _b| a.clone(),            // ∂z/∂b = a
-        )
+        );
+        match res.uncertainty() {
+            ValueType::Scalar(s) => println!("Result: {s}"),
+            _ => (),
+        }
+        for (k, v) in res.derivatives.iter() {
+            match v {
+                ValueType::Scalar(s) => println!("{k}: {s}"),
+                _ => (),
+            }
+        }
+        res
     }
 }
 

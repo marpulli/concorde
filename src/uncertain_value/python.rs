@@ -1,4 +1,4 @@
-use super::{NumpyArray, UncertainValue, ValueType};
+use super::{NumpyArray1D, UncertainValue, ValueType};
 use numpy::{PyArray1, PyArrayMethods};
 use pyo3::{IntoPyObjectExt, prelude::*};
 
@@ -42,8 +42,8 @@ impl PyUncertainValue {
             let val_readonly = val_array.try_readonly().unwrap();
             let unc_readonly = unc_array.try_readonly().unwrap();
 
-            let val_arc: NumpyArray = val_readonly.as_array().to_owned().into();
-            let unc_arc: NumpyArray = unc_readonly.as_array().to_owned().into();
+            let val_arc: NumpyArray1D = val_readonly.as_array().to_owned().into();
+            let unc_arc: NumpyArray1D = unc_readonly.as_array().to_owned().into();
 
             return Ok(Self {
                 inner: UncertainValue::new_independent_array(val_arc, unc_arc),
@@ -85,8 +85,8 @@ impl PyUncertainValue {
     /// Returns:
     ///     int or None: The variable ID for independent variables, None for computed values
     #[getter]
-    fn variable_id(&self) -> Option<usize> {
-        self.inner.variable_id
+    fn variable_id(&self) -> Option<String> {
+        self.inner.variable_id.map(|u| u.to_string())
     }
 
     /// Check if this is an independent variable

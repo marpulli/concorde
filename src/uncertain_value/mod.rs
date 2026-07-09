@@ -4,78 +4,92 @@ mod python;
 use numpy::ndarray::ArcArray;
 use numpy::ndarray::Dim;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::iter::Sum;
+use std::ops::Add;
+use std::ops::Mul;
+use toml::Value;
+use uuid::Uuid;
 
 // Re-export the Python bindings
 pub use python::PyUncertainValue;
 
-// Type alias for 1D numpy arrays
-pub type NumpyArray = ArcArray<f64, Dim<[usize; 1]>>;
+pub type NumpyArray1D = ArcArray<f64, Dim<[usize; 1]>>;
 
-// Unique identifier for independent random variables
-pub type VarId = usize;
-
-// Global counter for generating unique variable IDs
-static NEXT_VAR_ID: AtomicUsize = AtomicUsize::new(1);
+pub type VarId = Uuid;
 
 fn generate_unique_id() -> VarId {
-    NEXT_VAR_ID.fetch_add(1, Ordering::SeqCst)
+    Uuid::now_v7()
 }
 
-// Enum to represent either scalar or array values
 #[derive(Debug, Clone)]
 pub enum ValueType {
     Scalar(f64),
-    Array(NumpyArray),
+    Array(NumpyArray1D),
 }
 
-/// UncertainValue with automatic correlation tracking via derivative propagation
-///
-/// This implementation tracks derivatives with respect to all independent random
-/// variables that contribute to this value, enabling proper correlation handling.
+impl ValueType {
+    fn to_array(&self) -> NumpyArray1D {
+        match self {
+            ValueType::Array(a) => a.clone(),
+            ValueType::Scalar(s) => ArcArray::from_elem((1,), s.clone()),
+        }
+    }
+}
+
+impl Add for ValueType {
+    type Output = Self;
+    fn add(self: ValueType, rhs: ValueType) -> Self {
+        match (self, rhs) {
+            (ValueType::Scalar(l), ValueType::Scalar(r)) => ValueType::Scalar(l + r),
+            (r, l) => ValueType::Array(r.to_array() + l.to_array()),
+        }
+    }
+}
+
+impl Mul for ValueType {
+    type Output = Self;
+    fn mul(self: ValueType, rhs: ValueType) -> Self {
+        match (self, rhs) {
+            (ValueType::Scalar(l), ValueType::Scalar(r)) => ValueType::Scalar(l * r),
+            (r, l) => ValueType::Array(r.to_array() * l.to_array()),
+        }
+    }
+}
+
+impl Sum for ValueType {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(ValueType::Scalar(0.0), |acc, x| acc + x)
+    }
+}
+
 /// For example: x - x = 0 ± 0 (not sqrt(2) * uncertainty as naive propagation gives)
-///
-/// # Design:
-/// - Independent variables have a `variable_id` (Some(id)) and derivatives = {id: 1.0}
-/// - Computed values have `variable_id = None` and derivatives track all contributors
 /// - Uncertainty is computed via: σ² = Σᵢ (∂f/∂xᵢ)² σᵢ²
 #[derive(Debug, Clone)]
 pub struct UncertainValue {
-    /// The central value (scalar or array)
     pub value: ValueType,
 
-    /// Variable ID - present only for independent variables
-    /// Independent: Some(id), Computed: None
+    // TOOD: cache the computed uncertainy value
+    /// Variable ID is only present for independent variables
     pub variable_id: Option<VarId>,
 
     /// Derivatives with respect to each contributing independent variable
     /// Maps: variable_id -> ∂(this_value)/∂(that_variable)
-    /// For independent variable with id=k: {k: 1.0}
-    /// For computed values: {contributing_ids: computed_derivatives}
-    pub derivatives: HashMap<VarId, ValueType>,
+    derivatives: HashMap<VarId, ValueType>,
 
     /// Uncertainties of the source independent variables
     /// Maps: variable_id -> σ (standard uncertainty)
     /// Shared across all values derived from the same sources
-    pub source_uncertainties: HashMap<VarId, f64>,
+    source_uncertainties: HashMap<VarId, ValueType>,
 }
 
 impl UncertainValue {
-    /// Create a new independent random variable with a unique ID
-    ///
-    /// # Arguments
-    /// * `value` - The central value
-    /// * `uncertainty` - The standard uncertainty (σ)
-    ///
-    /// # Returns
-    /// An independent UncertainValue with derivative = 1.0 w.r.t. itself
     pub fn new_independent(value: f64, uncertainty: f64) -> Self {
         let id = generate_unique_id();
         let mut derivatives = HashMap::new();
         derivatives.insert(id, ValueType::Scalar(1.0));
 
         let mut source_uncertainties = HashMap::new();
-        source_uncertainties.insert(id, uncertainty);
+        source_uncertainties.insert(id, ValueType::Scalar(uncertainty));
 
         UncertainValue {
             value: ValueType::Scalar(value),
@@ -85,24 +99,15 @@ impl UncertainValue {
         }
     }
 
-    /// Create a new independent random variable with array values
-    ///
-    /// # Arguments
-    /// * `value` - Array of central values
-    /// * `uncertainty` - Array of standard uncertainties
-    pub fn new_independent_array(value: NumpyArray, uncertainty: NumpyArray) -> Self {
+    pub fn new_independent_array(value: NumpyArray1D, uncertainty: NumpyArray1D) -> Self {
         let id = generate_unique_id();
         let mut derivatives = HashMap::new();
 
-        // For array independent variables, derivative is an array of ones
         let ones = ArcArray::from_elem(value.dim(), 1.0);
         derivatives.insert(id, ValueType::Array(ones));
 
-        // For arrays, we store the uncertainty array as a single "source"
-        // The actual per-element uncertainties are in the array itself
-        // We'll need to handle this carefully in uncertainty computation
         let mut source_uncertainties = HashMap::new();
-        source_uncertainties.insert(id, 1.0); // Placeholder, actual uncertainty is in the array
+        source_uncertainties.insert(id, ValueType::Array(uncertainty));
 
         UncertainValue {
             value: ValueType::Array(value),
@@ -112,16 +117,10 @@ impl UncertainValue {
         }
     }
 
-    /// Create a computed value (internal use)
-    ///
-    /// # Arguments
-    /// * `value` - The computed value
-    /// * `derivatives` - Derivatives w.r.t. contributing variables
-    /// * `source_uncertainties` - Uncertainties of source variables
     pub(crate) fn from_computation(
         value: ValueType,
         derivatives: HashMap<VarId, ValueType>,
-        source_uncertainties: HashMap<VarId, f64>,
+        source_uncertainties: HashMap<VarId, ValueType>,
     ) -> Self {
         UncertainValue {
             value,
@@ -140,30 +139,33 @@ impl UncertainValue {
     ///
     /// Formula: σ² = Σᵢ (∂f/∂xᵢ)² σᵢ²
     pub fn uncertainty(&self) -> ValueType {
-        match &self.value {
-            ValueType::Scalar(_) => {
-                let variance: f64 = self.derivatives.iter()
-                    .filter_map(|(var_id, deriv)| {
-                        let sigma = self.source_uncertainties.get(var_id)?;
-                        match deriv {
-                            ValueType::Scalar(d) => Some(d * d * sigma * sigma),
-                            _ => None,
-                        }
-                    })
-                    .sum();
-                ValueType::Scalar(variance.sqrt())
-            }
-            ValueType::Array(_) => {
-                // For arrays, we need element-wise computation
-                // This is more complex and will be implemented as needed
-                todo!("Array uncertainty computation not yet implemented")
-            }
+        let var = self
+            .derivatives
+            .iter()
+            .filter_map(|(var_id, deriv)| {
+                let sigma = self.source_uncertainties.get(var_id)?;
+                Some(deriv.clone() * deriv.clone() * sigma.clone() * sigma.clone())
+            })
+            .sum();
+        match var {
+            ValueType::Scalar(s) => ValueType::Scalar(s.sqrt()),
+            ValueType::Array(a) => ValueType::Array(a.sqrt().into_shared()),
         }
+    }
+
+    pub fn source_uncertainties(&self) -> &HashMap<VarId, ValueType> {
+        &self.source_uncertainties
+    }
+
+    pub fn derivatives(&self) -> &HashMap<VarId, ValueType> {
+        &self.derivatives
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use numpy::array;
+
     use super::*;
 
     #[test]
@@ -190,6 +192,31 @@ mod tests {
     }
 
     #[test]
+    fn test_independent_array_variable_creation() {
+        let magnitude = array![0.0, 1.0, 2.0].into_shared();
+        let uncertainty = array![0.0, 0.1, 0.2].into_shared();
+        let x = UncertainValue::new_independent_array(magnitude, uncertainty);
+
+        // Should have a variable ID
+        assert!(x.variable_id.is_some());
+        assert!(x.is_independent());
+
+        // Should have one derivative (w.r.t. itself) = 1.0
+        assert_eq!(x.derivatives.len(), 1);
+        let var_id = x.variable_id.unwrap();
+        match x.derivatives.get(&var_id) {
+            Some(ValueType::Array(d)) => assert_eq!(d, array![1.0, 1.0, 1.0].into_shared()),
+            _ => panic!("Expected derivative = 1.0"),
+        }
+
+        // Check uncertainty
+        match x.uncertainty() {
+            ValueType::Array(u) => assert_eq!(u, array![0.0, 0.1, 0.2]),
+            _ => panic!("Expected array uncertainty"),
+        }
+    }
+
+    #[test]
     fn test_multiply_uncertain_by_uncertain() {
         // Test variance propagation: (a ± σ_a) * (b ± σ_b)
         // Result: (a*b) ± sqrt((b*σ_a)² + (a*σ_b)²)
@@ -212,12 +239,14 @@ mod tests {
         // Should have derivatives w.r.t. both variables
         assert_eq!(result.derivatives.len(), 2);
 
-        // Expected uncertainty: sqrt((4.0 * 0.3)² + (3.0 * 0.4)²)
-        // = sqrt(1.44 + 1.44) = sqrt(2.88) ≈ 1.697
+        // Expected uncertainty: sqrt((4.0 * 0.3)² + (3.0 * 0.4)²) ≈ 1.697
         let expected_uncertainty = ((4.0_f64 * 0.3).powi(2) + (3.0_f64 * 0.4).powi(2)).sqrt();
         match result.uncertainty() {
-            ValueType::Scalar(u) => assert!((u - expected_uncertainty).abs() < 1e-10),
-            _ => panic!("Expected scalar uncertainty"),
+            ValueType::Scalar(u) => assert!(
+                (u - expected_uncertainty).abs() < 1e-10,
+                "Got '{u}' expected {expected_uncertainty}"
+            ),
+            ValueType::Array(_) => panic!("Expected scalar uncertainty, got array"),
         }
     }
 
@@ -410,9 +439,9 @@ mod tests {
         let x = UncertainValue::new_independent(10.0, 1.0);
         let y = UncertainValue::new_independent(2.0, 0.2);
 
-        let numerator = &x + &y;    // 12.0
-        let denominator = &x - &y;  // 8.0
-        let result = &numerator / &denominator;  // 1.5
+        let numerator = &x + &y; // 12.0
+        let denominator = &x - &y; // 8.0
+        let result = &numerator / &denominator; // 1.5
 
         match result.value {
             ValueType::Scalar(v) => assert_eq!(v, 1.5),
