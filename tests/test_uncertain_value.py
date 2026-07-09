@@ -82,6 +82,54 @@ class TestUncertainValueScalar:
         # Uncertainty should be: sqrt((3.0 * 0.0)² + (5.0 * 0.3)²) = 1.5
 
 
+class TestUncertainValuePow:
+    """Tests for UncertainValue exponentiation."""
+
+    def test_square_value(self):
+        uv = UncertainValue(2.0, 0.2)
+        result = uv**2
+
+        assert result.value == 4.0
+
+    def test_square_uncertainty_matches_formula(self):
+        # sigma of x^2 = |2x| * sigma_x
+        uv = UncertainValue(3.0, 0.3)
+        result = uv**2
+
+        np.testing.assert_allclose(result.uncertainty, 2 * 3.0 * 0.3)
+
+    def test_square_matches_repeated_multiplication(self):
+        # x**2 should be correlation-aware and match x*x exactly, not the
+        # naive sqrt(2)*sigma you'd get treating the factors as independent
+        uv = UncertainValue(2.0, 0.2)
+
+        squared = uv**2
+        multiplied = uv * uv
+
+        assert squared.value == multiplied.value
+        np.testing.assert_allclose(squared.uncertainty, multiplied.uncertainty)
+
+    def test_sqrt_via_fractional_exponent(self):
+        uv = UncertainValue(4.0, 0.4)
+        result = uv**0.5
+
+        assert result.value == 2.0
+        # sigma of sqrt(x) = 0.5 * x^-0.5 * sigma_x = 0.5 / 2.0 * 0.4 = 0.1
+        np.testing.assert_allclose(result.uncertainty, 0.1)
+
+    def test_pow_array_value(self):
+        uv = UncertainValue(np.array([2.0, 3.0]), np.array([0.2, 0.3]))
+        result = uv**2
+
+        np.testing.assert_allclose(result.value, [4.0, 9.0])
+
+    def test_pow_with_modulo_raises(self):
+        uv = UncertainValue(2.0, 0.2)
+
+        with pytest.raises(TypeError):
+            pow(uv, 2, 5)
+
+
 class TestUncertainValueArray:
     """Tests for UncertainValue with numpy array values."""
 
