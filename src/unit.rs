@@ -54,6 +54,10 @@ impl DefinedUnit {
             aliases: aliases,
         }
     }
+
+    pub fn aliases(&self) -> &Vec<String> {
+        &self.aliases
+    }
 }
 
 impl fmt::Display for DefinedUnit {
