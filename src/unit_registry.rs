@@ -87,13 +87,20 @@ impl UnitRegistry {
     }
 
     pub fn define_unit(&mut self, unit: DefinedUnit) {
+        for alias in unit.aliases() {
+            self.aliases.insert(alias.clone(), unit.name.clone());
+        }
         self.defined_units.insert(unit.name.clone(), Arc::new(unit));
         // Invalidate parse cache since new units may affect existing parses
         self.parse_cache.lock().unwrap().clear();
     }
 
     pub fn get(&self, name: &String) -> Option<Arc<DefinedUnit>> {
-        self.defined_units.get(name).cloned()
+        if let Some(unit) = self.defined_units.get(name) {
+            return Some(unit.clone());
+        }
+        let canonical = self.aliases.get(name)?;
+        self.defined_units.get(canonical).cloned()
     }
 }
 
@@ -261,5 +268,54 @@ mod test {
         let unit = registry.parse_string("kg s".to_string()).unwrap();
         assert_eq!(unit.get_exponent(&"kg".to_string()), Some(1.0));
         assert_eq!(unit.get_exponent(&"s".to_string()), Some(1.0));
+    }
+
+    #[test]
+    fn test_parse_via_alias_equals_parse_via_canonical_name() {
+        let mut registry = create_unit_registry();
+        let newton = DefinedUnit::new(
+            "N".to_string(),
+            [1.0, 1.0, -2.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            vec!["newton".to_string(), "newtons".to_string()],
+        );
+        registry.define_unit(newton);
+
+        let via_alias = registry.parse_string("newton".to_string()).unwrap();
+        let via_canonical = registry.parse_string("N".to_string()).unwrap();
+
+        assert_eq!(via_alias.get_exponent(&"N".to_string()), Some(1.0));
+        assert!(via_alias.components.eq(&via_canonical.components));
+    }
+
+    #[test]
+    fn test_alias_in_compound_expression() {
+        let mut registry = create_unit_registry();
+        let newton = DefinedUnit::new(
+            "N".to_string(),
+            [1.0, 1.0, -2.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            vec!["newton".to_string()],
+        );
+        registry.define_unit(newton);
+
+        let unit = registry.parse_string("newton * m".to_string()).unwrap();
+        assert_eq!(unit.get_exponent(&"N".to_string()), Some(1.0));
+        assert_eq!(unit.get_exponent(&"m".to_string()), Some(1.0));
+    }
+
+    #[test]
+    fn test_unknown_name_still_errors() {
+        let mut registry = create_unit_registry();
+        let newton = DefinedUnit::new(
+            "N".to_string(),
+            [1.0, 1.0, -2.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            vec!["newton".to_string()],
+        );
+        registry.define_unit(newton);
+
+        let unit = registry.parse_string("not_a_unit".to_string());
+        assert!(unit.is_err());
     }
 }

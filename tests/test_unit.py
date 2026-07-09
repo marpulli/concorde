@@ -359,3 +359,27 @@ scale = 1000.0
         reg.load_definitions_from_string(toml_str)
         assert reg.parse("furlong").get_exponent("furlong") == 1.0
         assert reg.parse("kfurlong").get_exponent("kfurlong") == 1.0
+
+
+class TestAliases:
+    """Tests for unit alias resolution."""
+
+    def test_define_unit_with_aliases_then_parse_alias(self):
+        reg = UnitRegistry()
+        reg.define_unit(
+            "N",
+            [1.0, 1.0, -2.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            aliases=["newton", "newtons"],
+        )
+        newton = reg.parse("newton")
+        assert newton.get_exponent("N") == 1.0
+        newtons = reg.parse("newtons")
+        assert newtons.get_exponent("N") == 1.0
+
+    def test_fixture_file_alias_resolution(self):
+        reg = UnitRegistry()
+        reg.load_definitions(os.path.join(FIXTURES_DIR, "units.toml"))
+
+        assert reg.parse("newton").get_exponent("N") == 1.0
+        assert reg.parse("joules") == reg.parse("J")
