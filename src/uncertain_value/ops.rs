@@ -276,3 +276,23 @@ impl Neg for &UncertainValue {
         self * -1.0
     }
 }
+
+// ============================================================================
+// Exponentiation: z = a^n (scalar exponent)
+// Derivative: ∂z/∂x = n * a^(n-1) * ∂a/∂x
+// ============================================================================
+
+impl UncertainValue {
+    pub fn pow(&self, n: f64) -> UncertainValue {
+        let value = self.value.powf(n);
+
+        let df_da = self.value.powf(n - 1.0) * ValueType::Scalar(n);
+        let new_derivatives: HashMap<VarId, ValueType> = self
+            .derivatives
+            .iter()
+            .map(|(var_id, deriv)| (*var_id, deriv.clone() * df_da.clone()))
+            .collect();
+
+        UncertainValue::from_computation(value, new_derivatives, self.source_uncertainties.clone())
+    }
+}

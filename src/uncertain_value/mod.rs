@@ -34,6 +34,13 @@ impl ValueType {
             ValueType::Scalar(s) => ArcArray::from_elem((1,), s.clone()),
         }
     }
+
+    pub(crate) fn powf(&self, n: f64) -> ValueType {
+        match self {
+            ValueType::Scalar(s) => ValueType::Scalar(s.powf(n)),
+            ValueType::Array(a) => ValueType::Array(a.mapv(|v| v.powf(n)).into_shared()),
+        }
+    }
 }
 
 impl Add for ValueType {
@@ -450,5 +457,71 @@ mod tests {
 
         // Should have derivatives w.r.t. both x and y
         assert_eq!(result.derivatives.len(), 2);
+    }
+
+    #[test]
+    fn test_pow_matches_repeated_multiplication() {
+        // x**2 should have the same value and uncertainty as x*x (correlation-aware:
+        // sigma = |2x|*sigma_x, not the naive sqrt(2)*sigma_x you'd get treating the
+        // two factors as independent)
+        let x = UncertainValue::new_independent(2.0, 0.2);
+
+        let squared = x.pow(2.0);
+        let multiplied = &x * &x;
+
+        match (&squared.value, &multiplied.value) {
+            (ValueType::Scalar(a), ValueType::Scalar(b)) => assert_eq!(*a, *b),
+            _ => panic!("Expected scalar values"),
+        }
+
+        match (squared.uncertainty(), multiplied.uncertainty()) {
+            (ValueType::Scalar(a), ValueType::Scalar(b)) => assert!((a - b).abs() < 1e-10),
+            _ => panic!("Expected scalar uncertainties"),
+        }
+    }
+
+    #[test]
+    fn test_pow_uncertainty_formula() {
+        // sigma of x^2 should equal |2x| * sigma_x
+        let x = UncertainValue::new_independent(3.0, 0.3);
+        let squared = x.pow(2.0);
+
+        match squared.uncertainty() {
+            ValueType::Scalar(u) => assert!((u - (2.0 * 3.0 * 0.3)).abs() < 1e-10),
+            _ => panic!("Expected scalar uncertainty"),
+        }
+    }
+
+    #[test]
+    fn test_pow_fractional_exponent_sqrt() {
+        let x = UncertainValue::new_independent(4.0, 0.4);
+        let root = x.pow(0.5);
+
+        match root.value {
+            ValueType::Scalar(v) => assert!((v - 2.0).abs() < 1e-10),
+            _ => panic!("Expected scalar value"),
+        }
+
+        // sigma of sqrt(x) = 0.5 * x^(-0.5) * sigma_x = 0.5 / 2.0 * 0.4 = 0.1
+        match root.uncertainty() {
+            ValueType::Scalar(u) => assert!((u - 0.1).abs() < 1e-10),
+            _ => panic!("Expected scalar uncertainty"),
+        }
+    }
+
+    #[test]
+    fn test_pow_array_value() {
+        use numpy::array;
+
+        let magnitude = array![2.0, 3.0].into_shared();
+        let uncertainty = array![0.2, 0.3].into_shared();
+        let x = UncertainValue::new_independent_array(magnitude, uncertainty);
+
+        let squared = x.pow(2.0);
+
+        match squared.value {
+            ValueType::Array(v) => assert_eq!(v, array![4.0, 9.0]),
+            _ => panic!("Expected array value"),
+        }
     }
 }

@@ -240,6 +240,18 @@ impl PyUncertainValue {
         })
     }
 
+    /// Raise to a scalar power, propagating derivatives (correlation-aware)
+    fn __pow__(&self, n: f64, modulo: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        if modulo.is_some() {
+            return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                "pow() with modulo is not supported for UncertainValue",
+            ));
+        }
+        Ok(Self {
+            inner: self.inner.pow(n),
+        })
+    }
+
     /// String representation of the uncertain value
     fn __repr__(&self) -> PyResult<String> {
         let unc = self.inner.uncertainty();
