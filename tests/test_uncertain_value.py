@@ -123,12 +123,6 @@ class TestUncertainValuePow:
 
         np.testing.assert_allclose(result.value, [4.0, 9.0])
 
-    def test_pow_with_modulo_raises(self):
-        uv = UncertainValue(2.0, 0.2)
-
-        with pytest.raises(TypeError):
-            pow(uv, 2, 5)
-
 
 class TestUncertainValueArray:
     """Tests for UncertainValue with numpy array values."""

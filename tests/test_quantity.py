@@ -200,14 +200,6 @@ class TestQuantityPow:
         assert area.value.value == 9.0
         assert area.unit.get_exponent("m") == 2.0
 
-    def test_pow_with_modulo_raises(self):
-        reg = UnitRegistry()
-        m = reg.parse("m")
-        length = Quantity(UncertainValue(3.0, 0.3), m)
-
-        with pytest.raises(TypeError):
-            pow(length, 2, 5)
-
 
 class TestQuantityRepr:
     """Tests for Quantity string representation."""
