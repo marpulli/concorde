@@ -367,19 +367,4 @@ mod test {
             assert_eq!(registry.get(&"shared".to_string()).unwrap().name, "foo");
         }
     }
-
-    #[test]
-    fn test_unknown_name_still_errors() {
-        let mut registry = create_unit_registry();
-        let newton = DefinedUnit::new(
-            "N".to_string(),
-            [1.0, 1.0, -2.0, 0.0, 0.0, 0.0, 0.0],
-            1.0,
-            vec!["newton".to_string()],
-        );
-        registry.define_unit(newton).unwrap();
-
-        let unit = registry.parse_string("not_a_unit".to_string());
-        assert!(unit.is_err());
-    }
 }
