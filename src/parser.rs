@@ -67,6 +67,7 @@ impl PrattParser {
     fn expr_bp(&mut self, registry: &UnitRegistry, min_bp: u8) -> Result<Unit, ParserError> {
         let mut lhs = match self.next() {
             Some(Token::Number(n)) if n == 1.0 => Unit::new(HashMap::new()),
+            Some(Token::Identifier(name)) if name == "dimensionless" => Unit::new(HashMap::new()),
             Some(Token::Identifier(name)) => match registry.get(&name) {
                 Some(u) => Unit::new(HashMap::from([(u, 1.0)])),
                 None => return Err(ParserError::UnknownUnit),

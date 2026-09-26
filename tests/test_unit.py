@@ -35,6 +35,22 @@ class TestUnitRegistry:
         assert unit.components == {"m": -1.0}
         assert unit == reg.parse("m") ** -1
 
+    @pytest.mark.parametrize(
+        ("expression", "equivalent"),
+        [
+            ("dimensionless", "1"),
+            (" dimensionless ", "1"),
+            ("dimensionless * m", "m"),
+            ("m / dimensionless", "m"),
+            ("dimensionless / m", "1/m"),
+            ("dimensionless m", "m"),
+            ("(dimensionless)^(-1/2)", "1"),
+        ],
+    )
+    def test_parse_dimensionless_operand(self, expression, equivalent):
+        reg = UnitRegistry()
+        assert reg.parse(expression) == reg.parse(equivalent)
+
     def test_parse_unknown_unit_raises(self):
         reg = UnitRegistry()
         with pytest.raises(ValueError):
@@ -200,6 +216,74 @@ class TestUnitProperties:
         u1 = reg.parse("kg * m")
         u2 = reg.parse("m * kg")
         assert hash(u1) == hash(u2)
+
+
+class TestUnitRoundTrips:
+    """Canonical strings must preserve units when parsed by the same catalog."""
+
+    @staticmethod
+    def make_registry():
+        reg = UnitRegistry()
+        reg.load_definitions(os.path.join(FIXTURES_DIR, "units.toml"))
+        reg.define_unit("µm", [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1e-6, aliases=["um"])
+        reg.define_unit("%", [0.0] * 7, 0.01)
+        return reg
+
+    @pytest.fixture
+    def registry(self):
+        return self.make_registry()
+
+    @pytest.mark.parametrize(
+        "expression",
+        [
+            pytest.param("", id="empty-input"),
+            pytest.param("1", id="dimensionless-one"),
+            pytest.param("m/m", id="cancelled-units"),
+            "dimensionless",
+            "m^0",
+            "kg", "m", "s", "A", "K", "mol", "cd",
+            "kg * m / s^2", "s^-2 * m * kg", "kg m", "1/m",
+            "1/(kg * m)", "(kg * m / s)^2",
+            "m^-2", "m^2.5", "m^-2.5", "m^(1/2)", "m^(-1/2)",
+            "m^(1/3)", "m^(-2/3)", "kg^(2/5) / s^(1/3)",
+            "N", "newton", "joules", "km", "cm / hr", "newton * m",
+            "µm", "um", "%", "% / s",
+        ],
+    )
+    def test_parsed_unit_round_trip(self, registry, expression):
+        unit = registry.parse(expression)
+        canonical = str(unit)
+        # Use a fresh registry so a cached input cannot mask a parser failure.
+        target = self.make_registry()
+        restored = target.parse(canonical)
+        assert restored == unit, (expression, canonical)
+        assert str(restored) == canonical
+
+    @pytest.mark.parametrize("exponent", [0, -1, 0.5, -1 / 3, 1e-10, 1e20])
+    def test_arithmetic_power_round_trip(self, registry, exponent):
+        unit = registry.parse("m") ** exponent
+        restored = registry.parse(str(unit))
+        assert restored == unit
+        assert str(restored) == str(unit)
+
+    def test_arithmetic_cancellation_round_trip(self, registry):
+        metre = registry.parse("m")
+        unit = metre / metre
+        assert registry.parse(str(unit)) == unit
+
+    @pytest.mark.parametrize(
+        ("left", "right", "canonical"),
+        [
+            ("m * kg", "kg * m", "kg * m"),
+            ("s^-2 * m * kg", "kg * m / s^2", "kg * m * s^-2"),
+            ("newton * m", "m * N", "N * m"),
+            ("um", "µm", "µm"),
+        ],
+    )
+    def test_canonical_format_is_independent_of_order_and_aliases(
+        self, registry, left, right, canonical
+    ):
+        assert str(registry.parse(left)) == str(registry.parse(right)) == canonical
 
 
 class TestLoadDefinitions:
