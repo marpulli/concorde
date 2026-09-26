@@ -176,9 +176,17 @@ impl PrattParser {
 pub fn parse(registry: &UnitRegistry, input: &str) -> Result<Unit, ParserError> {
     let tokens = tokenize(input)?;
     let mut parser = PrattParser::new(tokens);
+    let unit = match parser.peek() {
+        None => Unit::new(HashMap::new()),
+        Some(_) => parser.expr_bp(registry, 0)?,
+    };
+
     match parser.peek() {
-        None => Ok(Unit::new(HashMap::new())),
-        Some(_) => parser.expr_bp(registry, 0),
+        None => Ok(unit),
+        Some(token) => Err(ParserError::UnexpectedToken(format!(
+            "expected end of input, got {:?}",
+            token
+        ))),
     }
 }
 

@@ -33,10 +33,11 @@ class TestUnitRegistry:
         with pytest.raises(ValueError):
             reg.parse("foo")
 
-    def test_parse_bad_syntax_raises(self):
+    @pytest.mark.parametrize("unit", ["kg @@ m", "kg^1.2.3", "kg 2 ", "kg ^ kg"])
+    def test_parse_bad_syntax_raises(self, unit):
         reg = UnitRegistry()
         with pytest.raises(ValueError):
-            reg.parse("kg @@ m")
+            reg.parse(unit)
 
     def test_implicit_multiplication(self):
         reg = UnitRegistry()
