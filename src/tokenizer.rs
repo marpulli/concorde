@@ -5,6 +5,7 @@ use std::str::Chars;
 pub(crate) enum Token {
     Identifier(String), // Unit names like "kg", "meter"
     Number(f64),        // For exponents: 2, 3.5
+    Minus,              // "-" (sign in exponents)
     Multiply,           // "*"
     Divide,             // "/"
     Power,              // "**" or "^"
@@ -122,6 +123,10 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, TokenizerError> {
                 } else {
                     tokens.push(Token::Multiply)
                 }
+            }
+            '-' => {
+                chars.next();
+                tokens.push(Token::Minus);
             }
             '/' => {
                 chars.next();

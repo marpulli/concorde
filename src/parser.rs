@@ -66,6 +66,7 @@ impl PrattParser {
 
     fn expr_bp(&mut self, registry: &UnitRegistry, min_bp: u8) -> Result<Unit, ParserError> {
         let mut lhs = match self.next() {
+            Some(Token::Number(n)) if n == 1.0 => Unit::new(HashMap::new()),
             Some(Token::Identifier(name)) => match registry.get(&name) {
                 Some(u) => Unit::new(HashMap::from([(u, 1.0)])),
                 None => return Err(ParserError::UnknownUnit),
@@ -85,7 +86,7 @@ impl PrattParser {
             }
             t => {
                 return Err(ParserError::UnexpectedToken(format!(
-                    "expected unit name or '(', got {:?}",
+                    "expected unit name, '1', or '(', got {:?}",
                     t
                 )));
             }
@@ -129,11 +130,12 @@ impl PrattParser {
     }
 
     /// Parse the value after a power operator.
-    /// Accepts a plain number or a parenthesized fraction like `(2/3)`.
+    /// Accepts a signed number or a parenthesized fraction like `(-2/3)`.
     fn parse_exponent_value(&mut self) -> Result<f64, ParserError> {
-        match self.next() {
-            Some(Token::Number(n)) => Ok(n),
+        match self.peek() {
+            Some(Token::Number(_)) | Some(Token::Minus) => self.expect_number(),
             Some(Token::LeftParen) => {
+                self.next();
                 let numerator = self.expect_number()?;
                 if self.peek() == Some(&Token::Divide) {
                     self.next();
@@ -163,8 +165,14 @@ impl PrattParser {
     }
 
     fn expect_number(&mut self) -> Result<f64, ParserError> {
+        let sign = if self.peek() == Some(&Token::Minus) {
+            self.next();
+            -1.0
+        } else {
+            1.0
+        };
         match self.next() {
-            Some(Token::Number(n)) => Ok(n),
+            Some(Token::Number(n)) => Ok(sign * n),
             t => Err(ParserError::ExpectedNumber(format!(
                 "expected number, got {:?}",
                 t
@@ -227,8 +235,11 @@ mod tests {
     #[test]
     fn test_parse_decimal_exponent() {
         let registry = create_unit_registry();
-        let unit = parse(&registry, "kg**2.5").unwrap();
-        assert_eq!(unit.get_exponent(&"kg".to_string()), Some(2.5));
+        for expression in ["kg^2.5", "kg**2.5"] {
+            let unit = parse(&registry, expression).unwrap();
+            assert_eq!(unit.get_exponent(&"kg".to_string()), Some(2.5));
+            assert_eq!(unit.components.len(), 1);
+        }
     }
 
     #[test]
@@ -241,10 +252,12 @@ mod tests {
     #[test]
     fn test_parse_unit_multiplication_with_asterisk() {
         let registry = create_unit_registry();
-        let unit = parse(&registry, "kg * s").unwrap();
-        assert_eq!(unit.get_exponent(&"kg".to_string()), Some(1.0));
-        assert_eq!(unit.get_exponent(&"s".to_string()), Some(1.0));
-        assert_eq!(unit.components.len(), 2);
+        for expression in ["kg*s", "kg * s"] {
+            let unit = parse(&registry, expression).unwrap();
+            assert_eq!(unit.get_exponent(&"kg".to_string()), Some(1.0));
+            assert_eq!(unit.get_exponent(&"s".to_string()), Some(1.0));
+            assert_eq!(unit.components.len(), 2);
+        }
     }
 
     #[test]
@@ -308,8 +321,84 @@ mod tests {
     #[test]
     fn test_implicit_multiplication() {
         let registry = create_unit_registry();
-        let unit = parse(&registry, "kg s").unwrap();
-        assert_eq!(unit.get_exponent(&"kg".to_string()), Some(1.0));
-        assert_eq!(unit.get_exponent(&"s".to_string()), Some(1.0));
+        for expression in ["kg s", "kg\ts", "kg\ns"] {
+            let unit = parse(&registry, expression).unwrap();
+            assert_eq!(unit.get_exponent(&"kg".to_string()), Some(1.0));
+            assert_eq!(unit.get_exponent(&"s".to_string()), Some(1.0));
+            assert_eq!(unit.components.len(), 2);
+        }
+    }
+
+    #[test]
+    fn test_parse_unit_identifiers() {
+        for name in ["m", "kg", "µm", "°C", "%", "_unit2"] {
+            let definition = DefinedUnit::new(name.into(), [0.0; 7], 1.0, vec![]);
+            let registry = UnitRegistry::new(vec![definition]).unwrap();
+            let unit = parse(&registry, name).unwrap();
+            assert_eq!(unit.get_exponent(&name.to_string()), Some(1.0));
+            assert_eq!(unit.components.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_parse_inverse_metre() {
+        let registry = create_unit_registry();
+        let unit = parse(&registry, "1/m").unwrap();
+        assert_eq!(unit.get_exponent(&"m".to_string()), Some(-1.0));
+        assert_eq!(unit.components.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_negative_exponents() {
+        let registry = create_unit_registry();
+        for expression in ["m^-1", "m**-1", "m^(-1)", "m^ -1", "m^(- 1)"] {
+            let unit = parse(&registry, expression)
+                .unwrap_or_else(|error| panic!("failed to parse {expression}: {error}"));
+            assert_eq!(unit.get_exponent(&"m".to_string()), Some(-1.0));
+            assert_eq!(unit.components.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_parse_negative_fraction_exponent() {
+        let registry = create_unit_registry();
+        for expression in ["m^(-1/2)", "m^(1/-2)", "m^-0.5"] {
+            let unit = parse(&registry, expression).unwrap();
+            assert_eq!(unit.get_exponent(&"m".to_string()), Some(-0.5));
+            assert_eq!(unit.components.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_rejects_invalid_minus_usage() {
+        let registry = create_unit_registry();
+        for expression in ["-m", "m-s", "m^-", "m^--1", "m^-s", "m^(-)"] {
+            assert!(parse(&registry, expression).is_err(), "accepted {expression}");
+        }
+    }
+
+    #[test]
+    fn test_empty_input_is_dimensionless() {
+        let registry = create_unit_registry();
+        for expression in ["", " ", "\t\n "] {
+            assert!(parse(&registry, expression).unwrap().components.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_rejects_malformed_numbers() {
+        let registry = create_unit_registry();
+        assert!(parse(&registry, "m^1.2.3").is_err());
+    }
+
+    #[test]
+    fn test_rejects_reserved_characters() {
+        let registry = create_unit_registry();
+        for expression in ["m@s", "m+s", "m[s]", "m\u{0000}"] {
+            assert!(
+                parse(&registry, expression).is_err(),
+                "accepted {expression:?}"
+            );
+        }
     }
 }

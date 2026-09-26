@@ -28,6 +28,13 @@ class TestUnitRegistry:
         assert unit.get_exponent("m") == 1.0
         assert unit.get_exponent("s") == -2.0
 
+    @pytest.mark.parametrize("expression", ["1/m", "m^-1"])
+    def test_parse_inverse_metre(self, expression):
+        reg = UnitRegistry()
+        unit = reg.parse(expression)
+        assert unit.components == {"m": -1.0}
+        assert unit == reg.parse("m") ** -1
+
     def test_parse_unknown_unit_raises(self):
         reg = UnitRegistry()
         with pytest.raises(ValueError):
@@ -82,7 +89,7 @@ class TestUnitRegistry:
         assert reg.parse(name).components == {name: 1.0}
         assert reg.parse(f"kg {name}").components == {"kg": 1.0, name: 1.0}
 
-    @pytest.mark.parametrize("character", list("+-=<>!.,;:@[]{}'\"`\\#&|?~") + ["\x00", "\x1b", "\x7f"])
+    @pytest.mark.parametrize("character", list("+=<>!.,;:@[]{}'\"`\\#&|?~") + ["\x00", "\x1b", "\x7f"])
     @pytest.mark.parametrize("prefix", ["", "unit"])
     def test_reserved_characters_in_unit_names_raise(self, character, prefix):
         reg = UnitRegistry()
@@ -90,6 +97,12 @@ class TestUnitRegistry:
         reg.define_unit(name, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1.0)
         with pytest.raises(ValueError, match="Tokenizer error: unexpected character"):
             reg.parse(name)
+
+    @pytest.mark.parametrize("expression", ["-m", "m-s", "m^-", "m^--1", "m^-s", "m^(-)"])
+    def test_invalid_minus_usage_raises(self, expression):
+        reg = UnitRegistry()
+        with pytest.raises(ValueError):
+            reg.parse(expression)
 
     def test_define_custom_unit_with_aliases(self):
         reg = UnitRegistry()
@@ -300,6 +313,17 @@ unit = "kg * m / s^2"
         reg.load_definitions_from_string(toml_str)
         newton = reg.parse("N")
         assert newton.get_exponent("N") == 1.0
+
+    @pytest.mark.parametrize("expression", ["1/m", "m^-1"])
+    def test_derived_unit_inverse_metre(self, expression):
+        reg = UnitRegistry()
+        toml_str = f"""
+[[unit]]
+name = "inverse_metre"
+unit = "{expression}"
+"""
+        assert reg.load_definitions_from_string(toml_str) == 1
+        assert reg.parse("inverse_metre").components == {"inverse_metre": 1.0}
 
     def test_derived_unit_chain(self):
         """Derived units can reference other derived units defined earlier."""
