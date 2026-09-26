@@ -75,8 +75,7 @@ fn apply_entry(registry: &mut UnitRegistry, entry: UnitDefinitionEntry) -> Resul
         dimensions,
         resolved_scale,
         entry.aliases,
-    ));
-    Ok(())
+    ))
 }
 
 #[cfg(test)]

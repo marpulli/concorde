@@ -118,8 +118,9 @@ impl PyUnitRegistry {
             scale,
             aliases.unwrap_or_default(),
         );
-        self.inner.define_unit(unit);
-        Ok(())
+        self.inner
+            .define_unit(unit)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))
     }
 
     fn load_definitions(&mut self, path: &str) -> PyResult<usize> {
