@@ -137,6 +137,50 @@ class TestUncertainValueArray:
         uv = UncertainValue(values, uncertainties)
         np.testing.assert_array_equal(uv.value, values)
 
+    @pytest.mark.parametrize("length", [0, 1, 3])
+    @pytest.mark.parametrize("uncertainty", [0, 0.25, np.float64(0.25)])
+    def test_create_array_with_scalar_uncertainty(self, length, uncertainty):
+        values = np.arange(length, dtype=float) + 1
+
+        uv = UncertainValue(values, uncertainty)
+
+        assert isinstance(uv.value, np.ndarray)
+        np.testing.assert_array_equal(uv.value, values)
+        np.testing.assert_allclose(uv.uncertainty, np.full(length, uncertainty))
+        result = uv * 2.0
+        np.testing.assert_array_equal(result.value, values * 2.0)
+        np.testing.assert_allclose(result.uncertainty, np.full(length, uncertainty * 2.0))
+
+    @pytest.mark.parametrize("length", [0, 1, 3])
+    def test_create_array_preserves_shape(self, length):
+        values = np.arange(length, dtype=float)
+        uncertainties = np.full(length, 0.25)
+
+        uv = UncertainValue(values, uncertainties)
+
+        assert isinstance(uv.value, np.ndarray)
+        assert isinstance(uv.uncertainty, np.ndarray)
+        np.testing.assert_array_equal(uv.value, values)
+        np.testing.assert_array_equal(uv.uncertainty, uncertainties)
+
+    @pytest.mark.parametrize("lengths", [(2, 3), (3, 2), (1, 3), (3, 1), (0, 1), (1, 0)])
+    def test_create_array_rejects_mismatched_shapes(self, lengths):
+        with pytest.raises(ValueError) as exc:
+            UncertainValue(np.zeros(lengths[0]), np.zeros(lengths[1]))
+
+        message = str(exc.value)
+        assert f"Value shape [{lengths[0]}]" in message
+        assert f"uncertainty shape [{lengths[1]}]" in message
+
+    def test_create_array_rejects_multidimensional_uncertainty(self):
+        with pytest.raises(ValueError, match=r"Value shape \[3\].*uncertainty shape \[1, 3\]"):
+            UncertainValue(np.zeros(3), np.zeros((1, 3)))
+
+    @pytest.mark.parametrize("values", [np.zeros((1, 3)), np.zeros(3, dtype=int)])
+    def test_create_array_rejects_unsupported_arrays(self, values):
+        with pytest.raises(TypeError):
+            UncertainValue(values, 0.1)
+
     def test_array_repr(self):
         """Test string representation of array UncertainValue."""
         values = np.array([1.0, 2.0, 3.0])
@@ -287,10 +331,10 @@ class TestUncertainValueEdgeCases:
         with pytest.raises(TypeError):
             UncertainValue("not a number", 0.5)
 
-    def test_mismatched_types_error(self):
-        """Test that mixing scalar and array raises an error."""
+    @pytest.mark.parametrize("length", [0, 1, 3])
+    def test_scalar_value_rejects_array_uncertainty(self, length):
         with pytest.raises(TypeError):
-            UncertainValue(5.0, np.array([0.1, 0.2, 0.3]))
+            UncertainValue(5.0, np.full(length, 0.1))
 
     def test_multiply_by_unsupported_type(self):
         """Test that multiplying by an unsupported type raises an error."""
