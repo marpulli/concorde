@@ -1,4 +1,5 @@
 use crate::parser::{self, ParserError};
+use crate::prefix::{self, PrefixDefinition};
 use crate::unit::{DefinedUnit, Unit};
 use std::sync::Mutex;
 use std::{
@@ -6,10 +7,24 @@ use std::{
     sync::Arc,
 };
 
+#[derive(Debug)]
+pub enum ResolveError {
+    UnknownIdentifier(String),
+}
+
+impl std::fmt::Display for ResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownIdentifier(name) => write!(f, "Unknown unit '{name}'"),
+        }
+    }
+}
+
 pub struct UnitRegistry {
     defined_units: HashMap<String, Arc<DefinedUnit>>,
     aliases: HashMap<String, String>,
-    /// Parse cache: maps input string → parsed Unit (interior-mutable for &self API)
+    /// All parsed units, including prefixed identifiers and compound expressions.
+    /// Cached units never enter defined_units or become prefix roots.
     parse_cache: Mutex<HashMap<String, Unit>>,
 }
 
@@ -45,16 +60,22 @@ impl UnitRegistry {
     pub fn new_with_si() -> UnitRegistry {
         let si_units = vec![
             DefinedUnit::new(
-                "kg".to_string(),
+                "g".to_string(),
                 [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                1.0,
-                vec![],
+                // Keep scales relative to coherent SI (kg), while g is the prefix root.
+                0.001,
+                vec!["gram".to_string(), "grams".to_string()],
             ),
             DefinedUnit::new(
                 "m".to_string(),
                 [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
                 1.0,
-                vec![],
+                vec![
+                    "meter".to_string(),
+                    "meters".to_string(),
+                    "metre".to_string(),
+                    "metres".to_string(),
+                ],
             ),
             DefinedUnit::new(
                 "s".to_string(),
@@ -111,17 +132,78 @@ impl UnitRegistry {
             self.aliases.insert(alias.clone(), unit.name.clone());
         }
         self.defined_units.insert(unit.name.clone(), Arc::new(unit));
-        // Invalidate parse cache since new units may affect existing parses
-        self.parse_cache.lock().unwrap().clear();
+        // Exact definitions can override previously generated interpretations.
+        self.parse_cache.get_mut().unwrap().clear();
         Ok(())
     }
 
-    pub fn get(&self, name: &String) -> Option<Arc<DefinedUnit>> {
+    /// Exact definitions and aliases only; never resolves prefixes.
+    pub fn get(&self, name: &str) -> Option<Arc<DefinedUnit>> {
         if let Some(unit) = self.defined_units.get(name) {
             return Some(unit.clone());
         }
         let canonical = self.aliases.get(name)?;
         self.defined_units.get(canonical).cloned()
+    }
+
+    fn prefixed_root(&self, name: &str) -> Option<(&'static PrefixDefinition, Arc<DefinedUnit>)> {
+        prefix::matches(name)
+            .find_map(|(prefix, remainder)| self.get(remainder).map(|root| (prefix, root)))
+    }
+
+    fn prefixed_name(&self, prefix: &PrefixDefinition, root: &Arc<DefinedUnit>) -> String {
+        let names_for = |root_name: &str| {
+            prefix
+                .spellings
+                .iter()
+                .map(|spelling| format!("{spelling}{root_name}"))
+                .find(|name| {
+                    self.get(name).is_none()
+                        && self.prefixed_root(name).is_some_and(
+                            |(candidate_prefix, candidate_root)| {
+                                candidate_prefix.symbol == prefix.symbol
+                                    && Arc::ptr_eq(&candidate_root, root)
+                            },
+                        )
+                })
+        };
+
+        // Prefer the canonical root and short prefix, then alternate prefixes.
+        if let Some(name) = names_for(&root.name) {
+            return name;
+        }
+
+        // Consult the authoritative alias map only when all spellings of the
+        // canonical root are shadowed. Sorting makes naming independent of input
+        // spelling, definition order, and hash-map iteration order.
+        let mut aliases: Vec<_> = self
+            .aliases
+            .iter()
+            .filter(|(_, canonical)| *canonical == &root.name)
+            .map(|(alias, _)| alias.as_str())
+            .collect();
+        aliases.sort_unstable();
+        aliases
+            .into_iter()
+            .find_map(names_for)
+            // The successfully resolved input is one of these combinations.
+            .expect("a resolved prefixed unit has an unambiguous spelling")
+    }
+
+    pub fn resolve_identifier(&self, name: &str) -> Result<Arc<DefinedUnit>, ResolveError> {
+        if let Some(unit) = self.get(name) {
+            return Ok(unit);
+        }
+        let (prefix, root) = self
+            .prefixed_root(name)
+            .ok_or_else(|| ResolveError::UnknownIdentifier(name.to_owned()))?;
+
+        Ok(Arc::new(DefinedUnit::new(
+            self.prefixed_name(prefix, &root),
+            root.dimensions,
+            prefix.scale * root.scale,
+            vec![],
+        )))
     }
 }
 

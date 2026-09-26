@@ -10,9 +10,9 @@
 #
 # 2. Derived unit — reference already-defined units:
 #    [[unit]]
-#    name = "km"
-#    unit = "m"
-#    scale = 1000.0
+#    name = "hr"
+#    unit = "s"
+#    scale = 3600.0
 #
 # Fields:
 #   name        (required)  Unique identifier for the unit
@@ -46,25 +46,7 @@ name = "Pa"
 unit = "N / m^2"
 aliases = ["pascal", "pascals"]
 
-# --- Length (non-SI) ---
-
-[[unit]]
-name = "km"
-unit = "m"
-scale = 1000.0
-aliases = ["kilometer", "kilometers"]
-
-[[unit]]
-name = "cm"
-unit = "m"
-scale = 0.01
-aliases = ["centimeter", "centimeters"]
-
-[[unit]]
-name = "mm"
-unit = "m"
-scale = 0.001
-aliases = ["millimeter", "millimeters"]
+# SI-prefixed units (km, cm, mm, etc.) are resolved automatically.
 
 # --- Time ---
 
