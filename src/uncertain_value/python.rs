@@ -56,9 +56,16 @@ impl PyUncertainValue {
             value.cast::<PyArray1<f64>>(),
             uncertainty.cast::<PyArray1<f64>>(),
         ) {
-            // TODO: should I be unwrapping here? There could be a borrow error
-            let val_readonly = val_array.try_readonly().unwrap();
-            let unc_readonly = unc_array.try_readonly().unwrap();
+            let val_readonly = val_array.try_readonly().map_err(|_| {
+                pyo3::exceptions::PyRuntimeError::new_err(
+                    "Cannot create UncertainValue: the value array is currently in use by another operation",
+                )
+            })?;
+            let unc_readonly = unc_array.try_readonly().map_err(|_| {
+                pyo3::exceptions::PyRuntimeError::new_err(
+                    "Cannot create UncertainValue: the uncertainty array is currently in use by another operation",
+                )
+            })?;
 
             let val_arc: NumpyArray1D = val_readonly.as_array().to_owned().into();
             let unc_arc: NumpyArray1D = unc_readonly.as_array().to_owned().into();
