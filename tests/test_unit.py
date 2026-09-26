@@ -61,6 +61,13 @@ class TestUnitRegistry:
         newton = reg.parse("N")
         assert newton.get_exponent("N") == 1.0
 
+    @pytest.mark.parametrize("unit", ["", " ", "\t", "\n"])
+    def test_empty_string_unit_is_dimensionless(self, unit):
+        reg = UnitRegistry()
+        result = reg.parse(unit)
+        assert result.components == {}
+        assert str(result) == "dimensionless"
+
 
 class TestUnitArithmetic:
     """Tests for Unit arithmetic operations."""
