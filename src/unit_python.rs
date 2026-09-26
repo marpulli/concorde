@@ -91,9 +91,14 @@ pub struct PyUnitRegistry {
 #[pymethods]
 impl PyUnitRegistry {
     #[new]
-    fn new() -> Self {
+    #[pyo3(signature = (*, load_defaults=true))]
+    fn new(load_defaults: bool) -> Self {
         PyUnitRegistry {
-            inner: UnitRegistry::new_with_si(),
+            inner: if load_defaults {
+                UnitRegistry::new_with_defaults()
+            } else {
+                UnitRegistry::new_with_si()
+            },
         }
     }
 

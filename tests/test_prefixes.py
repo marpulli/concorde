@@ -39,7 +39,7 @@ SI_PREFIXES = [
 
 @pytest.fixture
 def registry():
-    registry = UnitRegistry()
+    registry = UnitRegistry(load_defaults=False)
     registry.load_definitions(str(Path(__file__).parent / "fixtures" / "units.toml"))
     registry.load_definitions_from_string("""
 [[unit]]
@@ -122,7 +122,7 @@ def test_unicode_root_accepts_prefixes():
 
 @pytest.mark.parametrize("alias", [False, True])
 def test_exact_names_and_aliases_win_over_prefixes(alias):
-    registry = UnitRegistry()
+    registry = UnitRegistry(load_defaults=False)
     registry.define_unit("in", LENGTH, 0.0254)
     registry.define_unit(
         "minute" if alias else "min", TIME, 60, aliases=["min"] if alias else []
@@ -204,7 +204,7 @@ aliases = ["trip"]
 )
 def test_round_trip_in_fresh_registry(registry, expression):
     unit = registry.parse(expression)
-    fresh = UnitRegistry()
+    fresh = UnitRegistry(load_defaults=False)
     fresh.load_definitions(str(Path(__file__).parent / "fixtures" / "units.toml"))
     fresh.load_definitions_from_string("""
 [[unit]]

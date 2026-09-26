@@ -57,6 +57,13 @@ impl UnitRegistry {
         Ok(unit)
     }
 
+    pub fn new_with_defaults() -> UnitRegistry {
+        let mut registry = Self::new_with_si();
+        crate::unit_file_parser::load_from_string(&mut registry, include_str!("default_units.toml"))
+            .expect("Default unit definitions must be valid");
+        registry
+    }
+
     pub fn new_with_si() -> UnitRegistry {
         let si_units = vec![
             DefinedUnit::new(
@@ -81,31 +88,35 @@ impl UnitRegistry {
                 "s".to_string(),
                 [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
                 1.0,
-                vec![],
+                vec!["second".to_string(), "seconds".to_string()],
             ),
             DefinedUnit::new(
                 "A".to_string(),
                 [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
                 1.0,
-                vec![],
+                vec![
+                    "ampere".to_string(),
+                    "amperes".to_string(),
+                    "amp".to_string(),
+                ],
             ),
             DefinedUnit::new(
                 "K".to_string(),
                 [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
                 1.0,
-                vec![],
+                vec!["kelvin".to_string()],
             ),
             DefinedUnit::new(
                 "mol".to_string(),
                 [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
                 1.0,
-                vec![],
+                vec!["mole".to_string(), "moles".to_string()],
             ),
             DefinedUnit::new(
                 "cd".to_string(),
                 [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
                 1.0,
-                vec![],
+                vec!["candela".to_string(), "candelas".to_string()],
             ),
         ];
         UnitRegistry::new(si_units).expect("SI unit definitions must be valid")

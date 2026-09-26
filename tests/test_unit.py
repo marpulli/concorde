@@ -16,6 +16,10 @@ class TestUnitRegistry:
         reg = UnitRegistry()
         assert reg is not None
 
+    def test_registry_loads_defaults(self):
+        reg = UnitRegistry()
+        assert reg.parse("watt_hour").components == {"Wh": 1.0}
+
     def test_parse_simple_unit(self):
         reg = UnitRegistry()
         kg = reg.parse("kg")
@@ -121,7 +125,7 @@ class TestUnitRegistry:
             reg.parse(expression)
 
     def test_define_custom_unit_with_aliases(self):
-        reg = UnitRegistry()
+        reg = UnitRegistry(load_defaults=False)
         reg.define_unit(
             "N",
             [1.0, 1.0, -2.0, 0.0, 0.0, 0.0, 0.0],
@@ -223,7 +227,7 @@ class TestUnitRoundTrips:
 
     @staticmethod
     def make_registry():
-        reg = UnitRegistry()
+        reg = UnitRegistry(load_defaults=False)
         reg.load_definitions(os.path.join(FIXTURES_DIR, "units.toml"))
         reg.define_unit("%", [0.0] * 7, 0.01)
         return reg
@@ -289,19 +293,19 @@ class TestLoadDefinitions:
     """Tests for loading unit definitions from TOML files."""
 
     def test_load_definitions_from_file(self):
-        reg = UnitRegistry()
+        reg = UnitRegistry(load_defaults=False)
         path = os.path.join(FIXTURES_DIR, "units.toml")
         count = reg.load_definitions(path)
         assert count == 6  # Prefixed units are generated, not fixture definitions.
 
     def test_loaded_units_are_parseable(self):
-        reg = UnitRegistry()
+        reg = UnitRegistry(load_defaults=False)
         reg.load_definitions(os.path.join(FIXTURES_DIR, "units.toml"))
         newton = reg.parse("N")
         assert newton.get_exponent("N") == 1.0
 
     def test_loaded_units_in_compound_expressions(self):
-        reg = UnitRegistry()
+        reg = UnitRegistry(load_defaults=False)
         reg.load_definitions(os.path.join(FIXTURES_DIR, "units.toml"))
         # Energy: J = kg * m^2 / s^2, so N * m should parse
         unit = reg.parse("N * m")
@@ -332,7 +336,7 @@ scale = 201.168
             reg.load_definitions_from_string("this is {{ not valid toml")
 
     def test_load_definitions_preserves_existing_units(self):
-        reg = UnitRegistry()
+        reg = UnitRegistry(load_defaults=False)
         # SI units like kg should still work after loading extra definitions
         reg.load_definitions(os.path.join(FIXTURES_DIR, "units.toml"))
         kg = reg.parse("kg")
@@ -352,7 +356,7 @@ dimensions = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         assert thing.get_exponent("thing") == 1.0
 
     def test_load_multiple_files(self):
-        reg = UnitRegistry()
+        reg = UnitRegistry(load_defaults=False)
         reg.load_definitions(os.path.join(FIXTURES_DIR, "units.toml"))
 
         # Load a second set from a string
@@ -489,7 +493,7 @@ name = "bad"
 
     def test_fixture_file_uses_derived_units(self):
         """The fixture file defines derived units (N, J, W, Pa) from SI bases."""
-        reg = UnitRegistry()
+        reg = UnitRegistry(load_defaults=False)
         reg.load_definitions(os.path.join(FIXTURES_DIR, "units.toml"))
 
         # All derived units should be parseable
@@ -520,7 +524,7 @@ class TestAliases:
     """Tests for unit alias resolution."""
 
     def test_define_unit_with_aliases_then_parse_alias(self):
-        reg = UnitRegistry()
+        reg = UnitRegistry(load_defaults=False)
         reg.define_unit(
             "N",
             [1.0, 1.0, -2.0, 0.0, 0.0, 0.0, 0.0],
@@ -533,7 +537,7 @@ class TestAliases:
         assert newtons.get_exponent("N") == 1.0
 
     def test_fixture_file_alias_resolution(self):
-        reg = UnitRegistry()
+        reg = UnitRegistry(load_defaults=False)
         reg.load_definitions(os.path.join(FIXTURES_DIR, "units.toml"))
 
         assert reg.parse("newton").get_exponent("N") == 1.0
