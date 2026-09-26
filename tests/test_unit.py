@@ -225,7 +225,6 @@ class TestUnitRoundTrips:
     def make_registry():
         reg = UnitRegistry()
         reg.load_definitions(os.path.join(FIXTURES_DIR, "units.toml"))
-        reg.define_unit("µm", [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1e-6, aliases=["um"])
         reg.define_unit("%", [0.0] * 7, 0.01)
         return reg
 
@@ -293,7 +292,7 @@ class TestLoadDefinitions:
         reg = UnitRegistry()
         path = os.path.join(FIXTURES_DIR, "units.toml")
         count = reg.load_definitions(path)
-        assert count == 9  # 9 units defined in the fixture
+        assert count == 6  # Prefixed units are generated, not fixture definitions.
 
     def test_loaded_units_are_parseable(self):
         reg = UnitRegistry()

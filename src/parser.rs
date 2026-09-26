@@ -4,13 +4,13 @@ use std::collections::HashMap;
 
 use crate::tokenizer::{Token, TokenizerError, tokenize};
 use crate::unit::Unit;
-use crate::unit_registry::UnitRegistry;
+use crate::unit_registry::{ResolveError, UnitRegistry};
 
 #[derive(Debug)]
 pub enum ParserError {
     TokenizerError(TokenizerError),
     ExpectedNumber(String),
-    UnknownUnit,
+    Resolution(ResolveError),
     UnexpectedToken(String),
     UnexpectedEnd,
 }
@@ -20,7 +20,7 @@ impl std::fmt::Display for ParserError {
         match self {
             ParserError::TokenizerError(e) => write!(f, "{}", e),
             ParserError::ExpectedNumber(msg) => write!(f, "Expected number: {}", msg),
-            ParserError::UnknownUnit => write!(f, "Unknown unit"),
+            ParserError::Resolution(error) => write!(f, "{error}"),
             ParserError::UnexpectedToken(msg) => write!(f, "Unexpected token: {}", msg),
             ParserError::UnexpectedEnd => write!(f, "Unexpected end of input"),
         }
@@ -68,10 +68,12 @@ impl PrattParser {
         let mut lhs = match self.next() {
             Some(Token::Number(n)) if n == 1.0 => Unit::new(HashMap::new()),
             Some(Token::Identifier(name)) if name == "dimensionless" => Unit::new(HashMap::new()),
-            Some(Token::Identifier(name)) => match registry.get(&name) {
-                Some(u) => Unit::new(HashMap::from([(u, 1.0)])),
-                None => return Err(ParserError::UnknownUnit),
-            },
+            Some(Token::Identifier(name)) => {
+                let unit = registry
+                    .resolve_identifier(&name)
+                    .map_err(ParserError::Resolution)?;
+                Unit::new(HashMap::from([(unit, 1.0)]))
+            }
             Some(Token::LeftParen) => {
                 let inner = self.expr_bp(registry, 0)?;
                 match self.next() {
