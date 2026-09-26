@@ -51,6 +51,12 @@ class TestUnitRegistry:
         newton = reg.parse("N")
         assert newton.get_exponent("N") == 1.0
 
+    def test_define_non_ascii_unit(self):
+        reg = UnitRegistry()
+        reg.define_unit("µm", [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1e-6)
+        unit = reg.parse("µm")
+        assert unit.components == {"µm": 1.0}
+
     def test_define_custom_unit_with_aliases(self):
         reg = UnitRegistry()
         reg.define_unit(

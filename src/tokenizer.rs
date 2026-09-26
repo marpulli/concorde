@@ -70,7 +70,7 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, TokenizerError> {
                     }
                 }
             }
-            'a'..='z' | 'A'..='Z' => {
+            ch if ch.is_alphabetic() => {
                 let mut ident = String::new();
                 while let Some(&c) = chars.peek() {
                     if c.is_alphanumeric() || c == '_' {
