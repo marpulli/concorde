@@ -29,6 +29,24 @@ impl std::fmt::Display for TokenizerError {
     }
 }
 
+fn is_identifier_char(ch: char) -> bool {
+    !ch.is_whitespace()
+        && !ch.is_control()
+        && !matches!(
+            ch,
+            '*' | '/' | '^' | '(' | ')' // Existing operators and grouping
+                | '+' | '-' | '=' | '<' | '>' | '!' // Potential operators
+                | '.' | ',' | ';' | ':' | '@' // Separators and ambiguous syntax
+                | '[' | ']' | '{' | '}' // Future grouping
+                | '\'' | '"' | '`' | '\\' // Quoting and escaping
+                | '#' | '&' | '|' | '?' | '~' // Other reserved syntax
+        )
+}
+
+fn is_identifier_start(ch: char) -> bool {
+    is_identifier_char(ch) && !ch.is_ascii_digit()
+}
+
 fn skip_whitespace(chars: &mut Peekable<Chars>) {
     while let Some(&next_ch) = chars.peek() {
         if next_ch.is_whitespace() {
@@ -57,7 +75,7 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, TokenizerError> {
                             skip_whitespace(&mut chars);
                             let next_ch = chars.peek();
                             if let Some(&ch) = next_ch {
-                                if ch.is_alphabetic() || ch == '(' {
+                                if is_identifier_start(ch) || ch == '(' {
                                     tokens.push(Token::Multiply);
                                 }
                             } else {
@@ -70,10 +88,10 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, TokenizerError> {
                     }
                 }
             }
-            ch if ch.is_alphabetic() => {
+            ch if is_identifier_start(ch) => {
                 let mut ident = String::new();
                 while let Some(&c) = chars.peek() {
-                    if c.is_alphanumeric() || c == '_' {
+                    if is_identifier_char(c) {
                         ident.push(c);
                         chars.next();
                     } else {
