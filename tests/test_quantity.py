@@ -1,5 +1,6 @@
 """Tests for Quantity Python bindings."""
 
+import numpy as np
 import pytest
 from concorde import UncertainValue, UnitRegistry, Quantity, IncompatibleUnitError
 
@@ -213,3 +214,31 @@ class TestQuantityRepr:
         assert "Quantity" in r
         assert "5" in r
         assert "kg" in r
+
+    def test_array_repr(self):
+        kg = UnitRegistry().parse("kg")
+        value = UncertainValue(np.array([1.0, 2.0, 3.0]), np.array([0.1, 0.2, 0.3]))
+
+        assert repr(Quantity(value, kg)) == (
+            "Quantity([1, 2, 3] ± [0.1, 0.2, 0.3], shape=(3,), kg)"
+        )
+
+    def test_empty_array_repr(self):
+        kg = UnitRegistry().parse("kg")
+        value = UncertainValue(np.array([]), np.array([]))
+
+        assert repr(Quantity(value, kg)) == "Quantity([] ± [], shape=(0,), kg)"
+
+    def test_large_array_repr(self):
+        kg = UnitRegistry().parse("kg")
+        value = UncertainValue(np.arange(10000, dtype=float), np.zeros(10000))
+
+        result = repr(Quantity(value, kg))
+
+        assert result.startswith("Quantity([0, 1, 2,")
+        assert "9999]" in result
+        assert " ± [0," in result
+        assert result.count("...") == 2
+        assert "shape=(10000,)" in result
+        assert result.endswith(", kg)")
+        assert len(result) < 500

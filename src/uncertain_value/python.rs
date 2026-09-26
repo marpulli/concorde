@@ -289,6 +289,12 @@ impl PyUncertainValue {
             (ValueType::Scalar(v), ValueType::Scalar(u)) => {
                 format!("UncertainValue({} ± {})", v, u)
             }
+            (ValueType::Array(v), ValueType::Array(u)) => {
+                format!("UncertainValue({} ± {}, shape=({},))", v, u, v.len())
+            }
+            (ValueType::Array(v), ValueType::Scalar(u)) => {
+                format!("UncertainValue({} ± {}, shape=({},))", v, u, v.len())
+            }
             _ => "UncertainValue(array(...) ± array(...))".to_string(),
         })
     }

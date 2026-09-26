@@ -83,7 +83,13 @@ impl PyQuantity {
                     _ => format!("{}", v),
                 }
             }
-            ValueType::Array(_) => "array(...)".to_string(),
+            ValueType::Array(v) => {
+                let unc = self.inner.value().uncertainty();
+                match unc {
+                    ValueType::Array(u) => format!("{} ± {}, shape=({},)", v, u, v.len()),
+                    ValueType::Scalar(u) => format!("{} ± {}, shape=({},)", v, u, v.len()),
+                }
+            }
         };
         format!("Quantity({}, {})", value_str, self.inner.unit())
     }

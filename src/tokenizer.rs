@@ -22,7 +22,9 @@ pub enum TokenizerError {
 impl std::fmt::Display for TokenizerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TokenizerError::UnexpectedCharacter => write!(f, "Tokenizer error: unexpected character"),
+            TokenizerError::UnexpectedCharacter => {
+                write!(f, "Tokenizer error: unexpected character")
+            }
             TokenizerError::InvalidNumber(number) => {
                 write!(f, "Tokenizer error: invalid number '{}'", number)
             }
@@ -112,7 +114,9 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, TokenizerError> {
                         break;
                     }
                 }
-                let number = num.parse().map_err(|_| TokenizerError::InvalidNumber(num))?;
+                let number = num
+                    .parse()
+                    .map_err(|_| TokenizerError::InvalidNumber(num))?;
                 tokens.push(Token::Number(number));
             }
             '*' => {
