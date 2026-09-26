@@ -4,14 +4,18 @@ mod quantity_python;
 mod tokenizer;
 mod uncertain_value;
 mod unit;
+mod unit_file_parser;
 mod unit_python;
 mod unit_registry;
-mod unit_file_parser;
 
 use pyo3::prelude::*;
 use uncertain_value::PyUncertainValue;
 
-pyo3::create_exception!(_concorde, IncompatibleUnitError, pyo3::exceptions::PyException);
+pyo3::create_exception!(
+    _concorde,
+    IncompatibleUnitError,
+    pyo3::exceptions::PyException
+);
 
 #[pymodule]
 fn _concorde(m: &Bound<'_, PyModule>) -> PyResult<()> {

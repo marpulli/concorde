@@ -143,7 +143,24 @@ class TestUncertainValueArray:
         uncertainties = np.array([0.1, 0.2, 0.3])
 
         uv = UncertainValue(values, uncertainties)
-        assert "array(...)" in repr(uv)
+        assert repr(uv) == "UncertainValue([1, 2, 3] ± [0.1, 0.2, 0.3], shape=(3,))"
+
+    def test_empty_array_repr(self):
+        uv = UncertainValue(np.array([]), np.array([]))
+
+        assert repr(uv) == "UncertainValue([] ± [], shape=(0,))"
+
+    def test_large_array_repr(self):
+        uv = UncertainValue(np.arange(10000, dtype=float), np.zeros(10000))
+
+        result = repr(uv)
+
+        assert result.startswith("UncertainValue([0, 1, 2,")
+        assert "9999]" in result
+        assert " ± [0," in result
+        assert result.count("...") == 2
+        assert "shape=(10000,)" in result
+        assert len(result) < 500
 
     @pytest.mark.parametrize(
         "operation",

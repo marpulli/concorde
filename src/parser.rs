@@ -373,7 +373,10 @@ mod tests {
     fn test_rejects_invalid_minus_usage() {
         let registry = create_unit_registry();
         for expression in ["-m", "m-s", "m^-", "m^--1", "m^-s", "m^(-)"] {
-            assert!(parse(&registry, expression).is_err(), "accepted {expression}");
+            assert!(
+                parse(&registry, expression).is_err(),
+                "accepted {expression}"
+            );
         }
     }
 
