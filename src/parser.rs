@@ -214,7 +214,7 @@ mod tests {
             1.0,
             vec![],
         );
-        UnitRegistry::new(Vec::from_iter([kg_unit, s, m]))
+        UnitRegistry::new(Vec::from_iter([kg_unit, s, m])).unwrap()
     }
 
     #[test]

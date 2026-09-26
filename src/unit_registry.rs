@@ -1,7 +1,10 @@
 use crate::parser::{self, ParserError};
 use crate::unit::{DefinedUnit, Unit};
 use std::sync::Mutex;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 pub struct UnitRegistry {
     defined_units: HashMap<String, Arc<DefinedUnit>>,
@@ -11,15 +14,16 @@ pub struct UnitRegistry {
 }
 
 impl UnitRegistry {
-    pub fn new(defined_units: Vec<DefinedUnit>) -> UnitRegistry {
-        UnitRegistry {
-            defined_units: defined_units
-                .into_iter()
-                .map(|f| (f.name.clone(), Arc::new(f)))
-                .collect(),
+    pub fn new(defined_units: Vec<DefinedUnit>) -> Result<UnitRegistry, String> {
+        let mut registry = UnitRegistry {
+            defined_units: HashMap::new(),
             aliases: HashMap::new(),
             parse_cache: Mutex::new(HashMap::new()),
+        };
+        for unit in defined_units {
+            registry.define_unit(unit)?;
         }
+        Ok(registry)
     }
 
     pub fn parse_string(&self, string: String) -> Result<Unit, ParserError> {
@@ -83,16 +87,33 @@ impl UnitRegistry {
                 vec![],
             ),
         ];
-        UnitRegistry::new(si_units)
+        UnitRegistry::new(si_units).expect("SI unit definitions must be valid")
     }
 
-    pub fn define_unit(&mut self, unit: DefinedUnit) {
+    /// Reject duplicate aliases and alias/name collisions before mutating the registry.
+    pub fn define_unit(&mut self, unit: DefinedUnit) -> Result<(), String> {
+        if self.aliases.contains_key(&unit.name) {
+            return Err(format!(
+                "Unit name '{}' is already registered as an alias",
+                unit.name
+            ));
+        }
+        let mut seen = HashSet::new();
+        for alias in unit.aliases() {
+            if !seen.insert(alias) || self.aliases.contains_key(alias) {
+                return Err(format!("Duplicate alias '{alias}'"));
+            }
+            if alias == &unit.name || self.defined_units.contains_key(alias) {
+                return Err(format!("Alias '{alias}' conflicts with a unit name"));
+            }
+        }
         for alias in unit.aliases() {
             self.aliases.insert(alias.clone(), unit.name.clone());
         }
         self.defined_units.insert(unit.name.clone(), Arc::new(unit));
         // Invalidate parse cache since new units may affect existing parses
         self.parse_cache.lock().unwrap().clear();
+        Ok(())
     }
 
     pub fn get(&self, name: &String) -> Option<Arc<DefinedUnit>> {
@@ -129,7 +150,7 @@ mod test {
             1.0,
             vec![],
         );
-        return UnitRegistry::new(Vec::from_iter([kg_unit, s, m]));
+        return UnitRegistry::new(Vec::from_iter([kg_unit, s, m])).unwrap();
     }
 
     #[test]
@@ -279,7 +300,7 @@ mod test {
             1.0,
             vec!["newton".to_string(), "newtons".to_string()],
         );
-        registry.define_unit(newton);
+        registry.define_unit(newton).unwrap();
 
         let via_alias = registry.parse_string("newton".to_string()).unwrap();
         let via_canonical = registry.parse_string("N".to_string()).unwrap();
@@ -297,11 +318,54 @@ mod test {
             1.0,
             vec!["newton".to_string()],
         );
-        registry.define_unit(newton);
+        registry.define_unit(newton).unwrap();
 
         let unit = registry.parse_string("newton * m".to_string()).unwrap();
         assert_eq!(unit.get_exponent(&"N".to_string()), Some(1.0));
         assert_eq!(unit.get_exponent(&"m".to_string()), Some(1.0));
+    }
+
+    fn aliased_unit(name: &str, aliases: &[&str]) -> DefinedUnit {
+        DefinedUnit::new(
+            name.to_string(),
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            aliases.iter().map(|alias| alias.to_string()).collect(),
+        )
+    }
+
+    #[test]
+    fn constructor_registers_and_validates_aliases() {
+        let registry = UnitRegistry::new(vec![aliased_unit("foo", &["shared"])]).unwrap();
+        assert_eq!(registry.get(&"shared".to_string()).unwrap().name, "foo");
+        assert!(
+            UnitRegistry::new(vec![
+                aliased_unit("foo", &["shared"]),
+                aliased_unit("bar", &["shared"])
+            ])
+            .is_err()
+        );
+        assert!(UnitRegistry::new(vec![aliased_unit("foo", &["same", "same"])]).is_err());
+    }
+
+    #[test]
+    fn rejected_aliases_leave_registry_and_cache_unchanged() {
+        let mut registry = UnitRegistry::new(vec![aliased_unit("foo", &["shared"])]).unwrap();
+        registry.parse_string("shared".to_string()).unwrap();
+        for unit in [
+            aliased_unit("bar", &["fresh", "shared"]),
+            aliased_unit("bar", &["fresh", "fresh"]),
+            aliased_unit("bar", &["foo"]),
+            aliased_unit("bar", &["bar"]),
+            aliased_unit("shared", &[]),
+            aliased_unit("foo", &["shared"]),
+        ] {
+            assert!(registry.define_unit(unit).is_err());
+            assert_eq!(registry.defined_units.len(), 1);
+            assert_eq!(registry.aliases.len(), 1);
+            assert_eq!(registry.parse_cache.lock().unwrap().len(), 1);
+            assert_eq!(registry.get(&"shared".to_string()).unwrap().name, "foo");
+        }
     }
 
     #[test]
@@ -313,7 +377,7 @@ mod test {
             1.0,
             vec!["newton".to_string()],
         );
-        registry.define_unit(newton);
+        registry.define_unit(newton).unwrap();
 
         let unit = registry.parse_string("not_a_unit".to_string());
         assert!(unit.is_err());
