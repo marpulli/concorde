@@ -1,5 +1,5 @@
 use super::{NumpyArray1D, UncertainValue, ValueType};
-use numpy::{PyArray1, PyArrayMethods};
+use numpy::{PyArray1, PyArrayMethods, PyUntypedArray, PyUntypedArrayMethods};
 use pyo3::{IntoPyObjectExt, prelude::*};
 
 /// Python wrapper for UncertainValue
@@ -34,41 +34,57 @@ impl PyUncertainValue {
     /// Create a new UncertainValue from Python
     ///
     /// Args:
-    ///     value: Either a float or numpy array of values
-    ///     uncertainty: Either a float or numpy array of uncertainties
+    ///     value: Either a float or a one-dimensional float64 numpy array
+    ///     uncertainty: A scalar or, for array values, a float64 array of the same shape
     ///
     /// Returns:
     ///     UncertainValue: A new uncertain value instance
     ///
     /// Raises:
-    ///     TypeError: If value and uncertainty are not both floats or both numpy arrays
+    ///     TypeError: If value or uncertainty has an unsupported type
+    ///     ValueError: If value and uncertainty arrays have different shapes
     #[new]
     fn new(value: &Bound<'_, PyAny>, uncertainty: &Bound<'_, PyAny>) -> PyResult<Self> {
-        // Try to extract as scalar first
-        if let (Ok(val), Ok(unc)) = (value.extract::<f64>(), uncertainty.extract::<f64>()) {
-            return Ok(Self {
-                inner: UncertainValue::new_independent(val, unc),
-            });
+        // If both value and uncertainty are scalars, create a scalar UncertainValue
+        if !value.is_instance_of::<PyUntypedArray>()
+            && !uncertainty.is_instance_of::<PyUntypedArray>()
+        {
+            if let (Ok(val), Ok(unc)) = (value.extract::<f64>(), uncertainty.extract::<f64>()) {
+                return Ok(Self {
+                    inner: UncertainValue::new_independent(val, unc),
+                });
+            }
         }
 
-        // Try to extract as numpy arrays
-        if let (Ok(val_array), Ok(unc_array)) = (
-            value.cast::<PyArray1<f64>>(),
-            uncertainty.cast::<PyArray1<f64>>(),
-        ) {
+        if let Ok(val_array) = value.cast::<PyArray1<f64>>() {
             let val_readonly = val_array.try_readonly().map_err(|_| {
                 pyo3::exceptions::PyRuntimeError::new_err(
                     "Cannot create UncertainValue: the value array is currently in use by another operation",
                 )
             })?;
-            let unc_readonly = unc_array.try_readonly().map_err(|_| {
-                pyo3::exceptions::PyRuntimeError::new_err(
-                    "Cannot create UncertainValue: the uncertainty array is currently in use by another operation",
-                )
-            })?;
-
+            let unc_arc: NumpyArray1D = match uncertainty.cast::<PyUntypedArray>() {
+                Ok(unc_array) => {
+                    if val_array.shape() != unc_array.shape() {
+                        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                            "Value shape {:?} does not match uncertainty shape {:?}",
+                            val_array.shape(),
+                            unc_array.shape(),
+                        )));
+                    }
+                    let unc_array = uncertainty.cast::<PyArray1<f64>>()?;
+                    let unc_readonly = unc_array.try_readonly().map_err(|_| {
+                        pyo3::exceptions::PyRuntimeError::new_err(
+                            "Cannot create UncertainValue: the uncertainty array is currently in use by another operation",
+                        )
+                    })?;
+                    unc_readonly.as_array().to_owned().into()
+                }
+                Err(_) => {
+                    let unc = uncertainty.extract::<f64>()?;
+                    numpy::ndarray::Array1::from_elem(val_array.shape()[0], unc).into_shared()
+                }
+            };
             let val_arc: NumpyArray1D = val_readonly.as_array().to_owned().into();
-            let unc_arc: NumpyArray1D = unc_readonly.as_array().to_owned().into();
 
             return Ok(Self {
                 inner: UncertainValue::new_independent_array(val_arc, unc_arc),
@@ -76,7 +92,7 @@ impl PyUncertainValue {
         }
 
         Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-            "value and uncertainty must both be either floats or numpy arrays",
+            "value must be a scalar or a one-dimensional float64 numpy array; uncertainty must be a scalar or a matching float64 numpy array",
         ))
     }
 
