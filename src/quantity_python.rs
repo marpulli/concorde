@@ -31,35 +31,74 @@ impl PyQuantity {
         }
     }
 
-    fn __mul__(&self, other: &PyQuantity) -> PyQuantity {
-        PyQuantity {
-            inner: &self.inner * &other.inner,
-        }
+    fn __mul__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyQuantity> {
+        let inner = if let Ok(quantity) = other.extract::<PyRef<'_, PyQuantity>>() {
+            (&self.inner * &quantity.inner)?
+        } else {
+            (&self.inner * other.extract::<f64>()?)?
+        };
+        Ok(PyQuantity { inner })
+    }
+
+    fn __rmul__(&self, other: f64) -> PyResult<PyQuantity> {
+        Ok(PyQuantity {
+            inner: (&self.inner * other)?,
+        })
     }
 
     fn __add__(&self, other: &PyQuantity) -> PyResult<PyQuantity> {
-        (&self.inner + &other.inner)
-            .map(|inner| PyQuantity { inner })
-            .map_err(|e| crate::IncompatibleUnitError::new_err(e.to_string()))
+        Ok(PyQuantity {
+            inner: (&self.inner + &other.inner)?,
+        })
     }
 
     fn __sub__(&self, other: &PyQuantity) -> PyResult<PyQuantity> {
-        (&self.inner - &other.inner)
-            .map(|inner| PyQuantity { inner })
-            .map_err(|e| crate::IncompatibleUnitError::new_err(e.to_string()))
+        Ok(PyQuantity {
+            inner: (&self.inner - &other.inner)?,
+        })
     }
 
-    fn __truediv__(&self, other: &PyQuantity) -> PyQuantity {
-        PyQuantity {
-            inner: &self.inner / &other.inner,
-        }
+    fn __truediv__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyQuantity> {
+        let inner = if let Ok(quantity) = other.extract::<PyRef<'_, PyQuantity>>() {
+            (&self.inner / &quantity.inner)?
+        } else {
+            self.inner.divide_scalar(other.extract::<f64>()?)?
+        };
+        Ok(PyQuantity { inner })
+    }
+
+    fn __rtruediv__(&self, other: f64) -> PyResult<PyQuantity> {
+        let lhs = Quantity::new(
+            UncertainValue::new_independent(other, 0.0),
+            crate::unit::Unit::new(std::collections::HashMap::new()),
+        );
+        Ok(PyQuantity {
+            inner: (&lhs / &self.inner)?,
+        })
+    }
+
+    fn __pos__(&self) -> PyResult<PyQuantity> {
+        Ok(PyQuantity {
+            inner: self.inner.positive()?,
+        })
+    }
+
+    fn __neg__(&self) -> PyResult<PyQuantity> {
+        Ok(PyQuantity {
+            inner: self.inner.negative()?,
+        })
+    }
+
+    fn __abs__(&self) -> PyResult<PyQuantity> {
+        Ok(PyQuantity {
+            inner: self.inner.abs()?,
+        })
     }
 
     fn to(&self, unit: &PyUnit) -> PyResult<PyQuantity> {
-        self.inner
-            .to(&unit.inner)
-            .map(|inner| PyQuantity { inner })
-            .map_err(|e| crate::IncompatibleUnitError::new_err(e.to_string()))
+        Ok(PyQuantity {
+            inner: self.inner.to(&unit.inner)?,
+        })
     }
 
     fn __pow__(&self, n: f64, modulo: Option<&Bound<'_, PyAny>>) -> PyResult<PyQuantity> {
@@ -69,7 +108,7 @@ impl PyQuantity {
             ));
         }
         Ok(PyQuantity {
-            inner: self.inner.pow(n),
+            inner: self.inner.pow(n)?,
         })
     }
 

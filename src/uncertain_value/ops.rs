@@ -252,7 +252,11 @@ impl Add<&f64> for &UncertainValue {
     type Output = UncertainValue;
 
     fn add(self, scalar: &f64) -> Self::Output {
-        self + &UncertainValue::new_independent(*scalar, 0.0)
+        UncertainValue::from_computation(
+            self.value.clone() + ValueType::Scalar(*scalar),
+            self.derivatives.clone(),
+            self.source_uncertainties.clone(),
+        )
     }
 }
 
@@ -283,6 +287,23 @@ impl Neg for &UncertainValue {
 // ============================================================================
 
 impl UncertainValue {
+    /// First-order propagation; at signed zero retain its sign for the derivative.
+    pub fn abs(&self) -> UncertainValue {
+        let (value, derivative) = match &self.value {
+            ValueType::Scalar(v) => (ValueType::Scalar(v.abs()), ValueType::Scalar(v.signum())),
+            ValueType::Array(v) => (
+                ValueType::Array(v.mapv(f64::abs).into_shared()),
+                ValueType::Array(v.mapv(f64::signum).into_shared()),
+            ),
+        };
+        let derivatives = self
+            .derivatives
+            .iter()
+            .map(|(id, d)| (*id, mul_value_types(d, &derivative)))
+            .collect();
+        UncertainValue::from_computation(value, derivatives, self.source_uncertainties.clone())
+    }
+
     pub fn pow(&self, n: f64) -> UncertainValue {
         let value = self.value.powf(n);
 

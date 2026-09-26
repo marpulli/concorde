@@ -6,7 +6,14 @@ with Rust-accelerated core functionality.
 """
 
 # Import the Rust extension module
-from concorde._concorde import UncertainValue, Unit, UnitRegistry, Quantity, IncompatibleUnitError
+from concorde._concorde import (
+    UncertainValue,
+    Unit,
+    UnitRegistry,
+    Quantity,
+    IncompatibleUnitError,
+    AffineUnitError,
+)
 
 # Re-export for public API
 __all__ = [
@@ -15,6 +22,7 @@ __all__ = [
     "UnitRegistry",
     "Quantity",
     "IncompatibleUnitError",
+    "AffineUnitError",
 ]
 
 __version__ = "0.1.0"

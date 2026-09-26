@@ -11,6 +11,7 @@ pub enum ParserError {
     TokenizerError(TokenizerError),
     ExpectedNumber(String),
     Resolution(ResolveError),
+    Unit(crate::unit::UnitError),
     UnexpectedToken(String),
     UnexpectedEnd,
 }
@@ -21,6 +22,7 @@ impl std::fmt::Display for ParserError {
             ParserError::TokenizerError(e) => write!(f, "{}", e),
             ParserError::ExpectedNumber(msg) => write!(f, "Expected number: {}", msg),
             ParserError::Resolution(error) => write!(f, "{error}"),
+            ParserError::Unit(error) => write!(f, "{error}"),
             ParserError::UnexpectedToken(msg) => write!(f, "Unexpected token: {}", msg),
             ParserError::UnexpectedEnd => write!(f, "Unexpected end of input"),
         }
@@ -115,15 +117,15 @@ impl PrattParser {
             match op {
                 Token::Power => {
                     let exponent = self.parse_exponent_value()?;
-                    lhs = lhs.pow(exponent);
+                    lhs = lhs.pow(exponent).map_err(ParserError::Unit)?;
                 }
                 Token::Multiply => {
                     let rhs = self.expr_bp(registry, r_bp)?;
-                    lhs = lhs * rhs;
+                    lhs = (lhs * rhs).map_err(ParserError::Unit)?;
                 }
                 Token::Divide => {
                     let rhs = self.expr_bp(registry, r_bp)?;
-                    lhs = lhs / rhs;
+                    lhs = (lhs / rhs).map_err(ParserError::Unit)?;
                 }
                 _ => unreachable!(),
             }
