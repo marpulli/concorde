@@ -5,6 +5,8 @@ This module tests the PyO3-exposed UncertainValue class with both scalar
 and numpy array values, including multiplication operations and error propagation.
 """
 
+import operator
+
 import pytest
 import numpy as np
 from concorde import UncertainValue
@@ -142,6 +144,36 @@ class TestUncertainValueArray:
 
         uv = UncertainValue(values, uncertainties)
         assert "array(...)" in repr(uv)
+
+    @pytest.mark.parametrize(
+        "operation",
+        [operator.add, operator.sub, operator.mul, operator.truediv],
+        ids=["add", "sub", "mul", "div"],
+    )
+    def test_arrays_with_different_lengths_raise_value_error(self, operation):
+        """Incompatible array lengths must raise a Python error, not a Rust panic."""
+        uv1 = UncertainValue(np.array([1.0, 2.0]), np.array([0.1, 0.2]))
+        uv2 = UncertainValue(np.array([3.0, 4.0, 5.0]), np.array([0.3, 0.4, 0.5]))
+
+        with pytest.raises(ValueError, match="Incompatible array lengths"):
+            operation(uv1, uv2)
+
+    @pytest.mark.parametrize(
+        "operation",
+        [operator.add, operator.sub, operator.mul, operator.truediv],
+        ids=["add", "sub", "mul", "div"],
+    )
+    @pytest.mark.parametrize("lengths", [(3, 3), (1, 3), (3, 1), (0, 0), (0, 1), (1, 0)])
+    def test_binary_operations_preserve_array_broadcasting(self, operation, lengths):
+        values1 = np.full(lengths[0], 2.0)
+        values2 = np.full(lengths[1], 4.0)
+        uv1 = UncertainValue(values1, np.zeros_like(values1))
+        uv2 = UncertainValue(values2, np.zeros_like(values2))
+
+        result = operation(uv1, uv2)
+
+        np.testing.assert_allclose(result.value, operation(values1, values2))
+        np.testing.assert_allclose(result.uncertainty, np.zeros_like(result.value))
 
     def test_multiply_array_by_array(self):
         """Test element-wise multiplication of two array UncertainValues."""

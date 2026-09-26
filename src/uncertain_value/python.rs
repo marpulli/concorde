@@ -11,6 +11,24 @@ pub struct PyUncertainValue {
     pub(crate) inner: UncertainValue,
 }
 
+impl PyUncertainValue {
+    fn check_binary_shapes(&self, other: &Self) -> PyResult<()> {
+        if let (ValueType::Array(lhs), ValueType::Array(rhs)) =
+            (&self.inner.value, &other.inner.value)
+        {
+            // Arrays are one-dimensional; a length of one can broadcast.
+            if lhs.len() != rhs.len() && lhs.len() != 1 && rhs.len() != 1 {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "Incompatible array lengths: {} and {}",
+                    lhs.len(),
+                    rhs.len(),
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[pymethods]
 impl PyUncertainValue {
     /// Create a new UncertainValue from Python
@@ -111,6 +129,7 @@ impl PyUncertainValue {
     fn __mul__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         // Try to multiply with another UncertainValue
         if let Ok(other_uv) = other.extract::<PyRef<PyUncertainValue>>() {
+            self.check_binary_shapes(&other_uv)?;
             return Ok(Self {
                 inner: &self.inner * &other_uv.inner,
             });
@@ -138,6 +157,7 @@ impl PyUncertainValue {
     fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         // Try to add with another UncertainValue
         if let Ok(other_uv) = other.extract::<PyRef<PyUncertainValue>>() {
+            self.check_binary_shapes(&other_uv)?;
             return Ok(Self {
                 inner: &self.inner + &other_uv.inner,
             });
@@ -165,6 +185,7 @@ impl PyUncertainValue {
     fn __sub__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         // Try to subtract another UncertainValue
         if let Ok(other_uv) = other.extract::<PyRef<PyUncertainValue>>() {
+            self.check_binary_shapes(&other_uv)?;
             return Ok(Self {
                 inner: &self.inner - &other_uv.inner,
             });
@@ -201,6 +222,7 @@ impl PyUncertainValue {
     fn __truediv__(&self, other: &Bound<'_, PyAny>) -> PyResult<Self> {
         // Try to divide by another UncertainValue
         if let Ok(other_uv) = other.extract::<PyRef<PyUncertainValue>>() {
+            self.check_binary_shapes(&other_uv)?;
             return Ok(Self {
                 inner: &self.inner / &other_uv.inner,
             });
