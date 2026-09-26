@@ -57,6 +57,40 @@ class TestUnitRegistry:
         unit = reg.parse("µm")
         assert unit.components == {"µm": 1.0}
 
+    @pytest.mark.parametrize(
+        ("expression", "components"),
+        [
+            ("%", {"%": 1.0}),
+            ("%^2", {"%": 2.0}),
+            ("% * kg", {"%": 1.0, "kg": 1.0}),
+            ("kg / %", {"kg": 1.0, "%": -1.0}),
+            ("% / s", {"%": 1.0, "s": -1.0}),
+            ("% kg", {"%": 1.0, "kg": 1.0}),
+            ("kg %", {"kg": 1.0, "%": 1.0}),
+            ("(kg) %", {"kg": 1.0, "%": 1.0}),
+        ],
+    )
+    def test_define_percent_unit(self, expression, components):
+        reg = UnitRegistry()
+        reg.define_unit("%", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 0.01)
+        assert reg.parse(expression).components == components
+
+    @pytest.mark.parametrize("name", ["°C", "‰", "‱", "′", "″", "$", "€", "£", "¥", "_unit2"])
+    def test_define_symbol_unit(self, name):
+        reg = UnitRegistry()
+        reg.define_unit(name, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1.0)
+        assert reg.parse(name).components == {name: 1.0}
+        assert reg.parse(f"kg {name}").components == {"kg": 1.0, name: 1.0}
+
+    @pytest.mark.parametrize("character", list("+-=<>!.,;:@[]{}'\"`\\#&|?~") + ["\x00", "\x1b", "\x7f"])
+    @pytest.mark.parametrize("prefix", ["", "unit"])
+    def test_reserved_characters_in_unit_names_raise(self, character, prefix):
+        reg = UnitRegistry()
+        name = f"{prefix}{character}name"
+        reg.define_unit(name, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1.0)
+        with pytest.raises(ValueError, match="Tokenizer error: unexpected character"):
+            reg.parse(name)
+
     def test_define_custom_unit_with_aliases(self):
         reg = UnitRegistry()
         reg.define_unit(
