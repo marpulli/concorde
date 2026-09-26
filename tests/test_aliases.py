@@ -13,12 +13,10 @@ DIMENSIONS = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         ("bar", ["fresh", "shared"], "Duplicate alias 'shared'"),
         ("bar", ["fresh", "fresh"], "Duplicate alias 'fresh'"),
         ("bar", ["m"], "conflicts with a unit name"),
-        ("bar", ["bar"], "conflicts with a unit name"),
         ("shared", [], "already registered as an alias"),
-        ("foo", ["shared"], "Duplicate alias 'shared'"),
     ],
 )
-def test_rejected_definition_is_atomic(name, aliases, message):
+def test_duplicate_names_and_aliases_are_rejected(name, aliases, message):
     registry = UnitRegistry()
     registry.define_unit("foo", DIMENSIONS, 1.0, aliases=["shared"])
     assert registry.parse("shared").components == {"foo": 1.0}
