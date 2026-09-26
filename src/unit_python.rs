@@ -12,22 +12,22 @@ pub struct PyUnit {
 
 #[pymethods]
 impl PyUnit {
-    fn __mul__(&self, other: &PyUnit) -> PyUnit {
-        PyUnit {
-            inner: self.inner.clone() * other.inner.clone(),
-        }
+    fn __mul__(&self, other: &PyUnit) -> PyResult<PyUnit> {
+        Ok(PyUnit {
+            inner: (&self.inner * &other.inner)?,
+        })
     }
 
-    fn __truediv__(&self, other: &PyUnit) -> PyUnit {
-        PyUnit {
-            inner: self.inner.clone() / other.inner.clone(),
-        }
+    fn __truediv__(&self, other: &PyUnit) -> PyResult<PyUnit> {
+        Ok(PyUnit {
+            inner: (&self.inner / &other.inner)?,
+        })
     }
 
-    fn __pow__(&self, exponent: f64, _modulo: Option<u32>) -> PyUnit {
-        PyUnit {
-            inner: self.inner.pow(exponent),
-        }
+    fn __pow__(&self, exponent: f64, _modulo: Option<u32>) -> PyResult<PyUnit> {
+        Ok(PyUnit {
+            inner: self.inner.pow(exponent)?,
+        })
     }
 
     fn __str__(&self) -> String {
@@ -106,16 +106,20 @@ impl PyUnitRegistry {
         self.inner
             .parse_string(unit_string.to_string())
             .map(|unit| PyUnit { inner: unit })
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
+            .map_err(|e| match e {
+                crate::parser::ParserError::Unit(e) => e.into(),
+                e => pyo3::exceptions::PyValueError::new_err(e.to_string()),
+            })
     }
 
-    #[pyo3(signature = (name, dimensions, scale, aliases=None))]
+    #[pyo3(signature = (name, dimensions, scale, aliases=None, *, offset=None))]
     fn define_unit(
         &mut self,
         name: &str,
         dimensions: [f64; 7],
         scale: f64,
         aliases: Option<Vec<String>>,
+        offset: Option<f64>,
     ) -> PyResult<()> {
         let unit = DefinedUnit::new(
             name.to_string(),
@@ -123,6 +127,10 @@ impl PyUnitRegistry {
             scale,
             aliases.unwrap_or_default(),
         );
+        let unit = match offset {
+            Some(offset) => unit.with_offset(offset),
+            None => unit,
+        };
         self.inner
             .define_unit(unit)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))

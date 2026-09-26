@@ -174,5 +174,17 @@ unit = "m^3"
 scale = 33.2
 aliases = ["twenty_foot_equivalent_unit", "TEU"]
 
-# degree_Celsius is intentionally absent: absolute temperatures require
-# affine conversion, which the scale-only unit model does not support.
+# Offsets are in kelvin: base = value * scale + offset.
+# Registration also creates delta_ names and aliases, with scale only.
+[[unit]]
+name = "degree_Celsius"
+unit = "K"
+offset = 273.15
+aliases = ["degC", "celsius"]
+
+[[unit]]
+name = "degree_Fahrenheit"
+unit = "K"
+scale = 0.5555555555555556
+offset = 255.3722222222222
+aliases = ["degF", "fahrenheit"]

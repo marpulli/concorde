@@ -1,5 +1,5 @@
 use crate::uncertain_value::UncertainValue;
-use crate::unit::{IncompatibleUnitsError, Unit};
+use crate::unit::{Unit, UnitError};
 use std::ops::{Add, Div, Mul, Sub};
 
 // Marker trait for types that can be used in Quantity
@@ -60,14 +60,16 @@ where
     T: QuantityValue,
     for<'a> &'a T: Mul<f64, Output = T>,
 {
-    /// Convert this quantity to an equivalent value expressed in `target` units.
-    /// Returns an error if `target` is not dimensionally compatible.
-    pub fn to(&self, target: &Unit) -> Result<Quantity<T>, IncompatibleUnitsError> {
-        let factor = target.conversion_factor(&self.unit)?;
-        Ok(Quantity {
-            value: &self.value * factor,
-            unit: target.clone(),
-        })
+    /// Convert this quantity, preserving uncertainty through scale and offset.
+    pub fn to(&self, target: &Unit) -> Result<Quantity<T>, UnitError>
+    where
+        for<'a, 'b> &'a T: Add<&'b f64, Output = T>,
+    {
+        let conversion = self.unit.conversion_to(target)?;
+        Ok(Quantity::new(
+            conversion.apply::<T>(&self.value),
+            target.clone(),
+        ))
     }
 }
 
@@ -76,11 +78,53 @@ where
     T: QuantityValue + Powf,
 {
     /// Raise both the value and the unit to a scalar power.
-    pub fn pow(&self, n: f64) -> Quantity<T> {
-        Quantity {
-            value: self.value.powf(n),
-            unit: self.unit.pow(n),
-        }
+    pub fn pow(&self, n: f64) -> Result<Quantity<T>, UnitError> {
+        let unit = self.unit.pow(n)?;
+        Ok(Quantity::new(self.value.powf(n), unit))
+    }
+}
+
+impl<T> Quantity<T>
+where
+    T: QuantityValue + Clone,
+    for<'a> &'a T: Mul<f64, Output = T>,
+{
+    pub fn positive(&self) -> Result<Self, UnitError> {
+        self.unit.check_multiplicative("unary plus")?;
+        Ok(Self::new(self.value.clone(), self.unit.clone()))
+    }
+
+    pub fn negative(&self) -> Result<Self, UnitError> {
+        self.unit.check_multiplicative("negation")?;
+        Ok(Self::new(&self.value * -1.0, self.unit.clone()))
+    }
+
+    pub fn divide_scalar(&self, rhs: f64) -> Result<Self, UnitError> {
+        self.unit.check_multiplicative("scalar division")?;
+        Ok(Self::new(&self.value * (1.0 / rhs), self.unit.clone()))
+    }
+}
+
+pub trait AbsoluteValue {
+    fn absolute(&self) -> Self;
+}
+
+impl AbsoluteValue for f64 {
+    fn absolute(&self) -> Self {
+        self.abs()
+    }
+}
+
+impl AbsoluteValue for UncertainValue {
+    fn absolute(&self) -> Self {
+        self.abs()
+    }
+}
+
+impl<T: QuantityValue + AbsoluteValue> Quantity<T> {
+    pub fn abs(&self) -> Result<Self, UnitError> {
+        self.unit.check_multiplicative("absolute value")?;
+        Ok(Self::new(self.value.absolute(), self.unit.clone()))
     }
 }
 
@@ -92,13 +136,11 @@ where
     for<'a, 'b> &'a T: Mul<&'b U, Output = Output>,
     Output: QuantityValue,
 {
-    type Output = Quantity<Output>;
+    type Output = Result<Quantity<Output>, UnitError>;
 
     fn mul(self, other: &Quantity<U>) -> Self::Output {
-        Quantity {
-            value: &self.value * &other.value,
-            unit: &self.unit * &other.unit,
-        }
+        let unit = (&self.unit * &other.unit)?;
+        Ok(Quantity::new(&self.value * &other.value, unit))
     }
 }
 
@@ -106,19 +148,16 @@ where
 impl<T> Add<&Quantity<T>> for &Quantity<T>
 where
     T: QuantityValue,
-    for<'a, 'b> &'a T: Add<&'b T, Output = T>,
+    for<'a, 'b> &'a T: Add<&'b T, Output = T> + Add<&'b f64, Output = T>,
     for<'a> &'a T: Mul<f64, Output = T>,
 {
-    type Output = Result<Quantity<T>, IncompatibleUnitsError>;
+    type Output = Result<Quantity<T>, UnitError>;
 
     fn add(self, other: &Quantity<T>) -> Self::Output {
-        let factor = self.unit.conversion_factor(&other.unit)?;
-
-        let converted = &other.value * factor;
-        Ok(Quantity {
-            value: &self.value + &converted,
-            unit: self.unit.clone(),
-        })
+        let plan = self.unit.addition(&other.unit)?;
+        let lhs = plan.lhs.apply::<T>(&self.value);
+        let rhs = plan.rhs.apply::<T>(&other.value);
+        Ok(Quantity::new(&lhs + &rhs, plan.result))
     }
 }
 
@@ -126,19 +165,16 @@ where
 impl<T> Sub<&Quantity<T>> for &Quantity<T>
 where
     T: QuantityValue,
-    for<'a, 'b> &'a T: Sub<&'b T, Output = T>,
+    for<'a, 'b> &'a T: Sub<&'b T, Output = T> + Add<&'b f64, Output = T>,
     for<'a> &'a T: Mul<f64, Output = T>,
 {
-    type Output = Result<Quantity<T>, IncompatibleUnitsError>;
+    type Output = Result<Quantity<T>, UnitError>;
 
     fn sub(self, other: &Quantity<T>) -> Self::Output {
-        let factor = self.unit.conversion_factor(&other.unit)?;
-
-        let converted = &other.value * factor;
-        Ok(Quantity {
-            value: &self.value - &converted,
-            unit: self.unit.clone(),
-        })
+        let plan = self.unit.subtraction(&other.unit)?;
+        let lhs = plan.lhs.apply::<T>(&self.value);
+        let rhs = plan.rhs.apply::<T>(&other.value);
+        Ok(Quantity::new(&lhs - &rhs, plan.result))
     }
 }
 
@@ -150,13 +186,11 @@ where
     for<'a, 'b> &'a T: Div<&'b U, Output = Output>,
     Output: QuantityValue,
 {
-    type Output = Quantity<Output>;
+    type Output = Result<Quantity<Output>, UnitError>;
 
     fn div(self, other: &Quantity<U>) -> Self::Output {
-        Quantity {
-            value: &self.value / &other.value,
-            unit: &self.unit / &other.unit,
-        }
+        let unit = (&self.unit / &other.unit)?;
+        Ok(Quantity::new(&self.value / &other.value, unit))
     }
 }
 
@@ -166,13 +200,11 @@ where
     T: QuantityValue,
     for<'a> &'a T: Mul<f64, Output = T>,
 {
-    type Output = Quantity<T>;
+    type Output = Result<Quantity<T>, UnitError>;
 
     fn mul(self, other: f64) -> Self::Output {
-        Quantity {
-            value: &self.value * other,
-            unit: self.unit.clone(),
-        }
+        self.unit.check_multiplicative("scalar multiplication")?;
+        Ok(Quantity::new(&self.value * other, self.unit.clone()))
     }
 }
 
@@ -274,7 +306,7 @@ mod tests {
         let float_qty = Quantity::new(2.0, m);
 
         // Multiply: (5.0 ± 0.5 kg) * (2.0 m) = (10.0 ± 1.0 kg*m)
-        let result = &uncertain_qty * &float_qty;
+        let result = (&uncertain_qty * &float_qty).unwrap();
 
         use crate::uncertain_value::ValueType;
         match &result.value.value {
@@ -381,7 +413,7 @@ mod tests {
         let m = Unit::new(HashMap::from([(m_unit, 1.0)]));
 
         let length = Quantity::new(UncertainValue::new_independent(3.0, 0.3), m);
-        let area = length.pow(2.0);
+        let area = length.pow(2.0).unwrap();
 
         match &area.value().value {
             ValueType::Scalar(v) => assert_eq!(*v, 9.0),

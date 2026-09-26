@@ -1,4 +1,7 @@
-use crate::{unit::DefinedUnit, unit_registry::UnitRegistry};
+use crate::{
+    unit::{DefinedUnit, UnitKind},
+    unit_registry::UnitRegistry,
+};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -13,6 +16,7 @@ struct UnitDefinitionEntry {
     dimensions: Option<[f64; 7]>,
     unit: Option<String>,
     scale: Option<f64>,
+    offset: Option<f64>,
     #[serde(default)]
     aliases: Vec<String>,
 }
@@ -57,8 +61,8 @@ fn apply_entry(registry: &mut UnitRegistry, entry: UnitDefinitionEntry) -> Resul
 
     let scale = entry.scale.unwrap_or(1.0);
 
-    let (dimensions, resolved_scale) = if let Some(dims) = entry.dimensions {
-        (dims, scale)
+    let (dimensions, resolved_scale, kind) = if let Some(dims) = entry.dimensions {
+        (dims, scale, UnitKind::Linear)
     } else {
         let expression = entry.unit.unwrap();
         let resolved_unit = registry.parse_string(expression.clone()).map_err(|e| {
@@ -67,15 +71,27 @@ fn apply_entry(registry: &mut UnitRegistry, entry: UnitDefinitionEntry) -> Resul
                 entry.name
             )
         })?;
-        (resolved_unit.dimensions(), scale * resolved_unit.scale())
+        resolved_unit
+            .check_multiplicative("derived definition")
+            .map_err(|e| e.to_string())?;
+        let kind = if resolved_unit.is_delta() {
+            UnitKind::Delta
+        } else {
+            UnitKind::Linear
+        };
+        (
+            resolved_unit.dimensions(),
+            scale * resolved_unit.scale(),
+            kind,
+        )
     };
 
-    registry.define_unit(DefinedUnit::new(
-        entry.name,
-        dimensions,
-        resolved_scale,
-        entry.aliases,
-    ))
+    let mut unit = DefinedUnit::new(entry.name, dimensions, resolved_scale, entry.aliases);
+    unit.kind = kind;
+    registry.define_unit(match entry.offset {
+        Some(offset) => unit.with_offset(offset),
+        None => unit,
+    })
 }
 
 #[cfg(test)]

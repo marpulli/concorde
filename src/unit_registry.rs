@@ -1,6 +1,6 @@
 use crate::parser::{self, ParserError};
 use crate::prefix::{self, PrefixDefinition};
-use crate::unit::{DefinedUnit, Unit};
+use crate::unit::{DefinedUnit, Unit, UnitKind};
 use std::sync::Mutex;
 use std::{
     collections::{HashMap, HashSet},
@@ -59,8 +59,11 @@ impl UnitRegistry {
 
     pub fn new_with_defaults() -> UnitRegistry {
         let mut registry = Self::new_with_si();
-        crate::unit_file_parser::load_from_string(&mut registry, include_str!("default_units.toml"))
-            .expect("Default unit definitions must be valid");
+        crate::unit_file_parser::load_from_string(
+            &mut registry,
+            include_str!("default_units.toml"),
+        )
+        .expect("Default unit definitions must be valid");
         registry
     }
 
@@ -124,6 +127,40 @@ impl UnitRegistry {
 
     /// Reject duplicate aliases and alias/name collisions before mutating the registry.
     pub fn define_unit(&mut self, unit: DefinedUnit) -> Result<(), String> {
+        if let UnitKind::Affine { offset, delta } = &unit.kind {
+            if !offset.is_finite() || !unit.scale.is_finite() || unit.scale <= 0.0 {
+                return Err(
+                    "Affine units require a finite offset and positive finite scale".into(),
+                );
+            }
+            // Stage the pair so collisions cannot leave a half-registered definition.
+            let mut staged = Self {
+                defined_units: self.defined_units.clone(),
+                aliases: self.aliases.clone(),
+                parse_cache: Mutex::new(HashMap::new()),
+            };
+            if staged.get(&unit.name).is_some() || staged.get(&delta.name).is_some() {
+                return Err("Affine or generated delta unit name already exists".into());
+            }
+            staged.insert_unit((**delta).clone())?;
+            staged.insert_unit(unit)?;
+            *self = staged;
+            return Ok(());
+        }
+        self.insert_unit(unit)
+    }
+
+    fn insert_unit(&mut self, unit: DefinedUnit) -> Result<(), String> {
+        if self
+            .defined_units
+            .get(&unit.name)
+            .is_some_and(|existing| !matches!(existing.kind, UnitKind::Linear))
+        {
+            return Err(format!(
+                "Cannot redefine affine or delta unit '{}'",
+                unit.name
+            ));
+        }
         if self.aliases.contains_key(&unit.name) {
             return Err(format!(
                 "Unit name '{}' is already registered as an alias",
@@ -158,8 +195,11 @@ impl UnitRegistry {
     }
 
     fn prefixed_root(&self, name: &str) -> Option<(&'static PrefixDefinition, Arc<DefinedUnit>)> {
-        prefix::matches(name)
-            .find_map(|(prefix, remainder)| self.get(remainder).map(|root| (prefix, root)))
+        prefix::matches(name).find_map(|(prefix, remainder)| {
+            self.get(remainder)
+                .filter(|root| !matches!(root.kind, UnitKind::Affine { .. }))
+                .map(|root| (prefix, root))
+        })
     }
 
     fn prefixed_name(&self, prefix: &PrefixDefinition, root: &Arc<DefinedUnit>) -> String {
@@ -209,12 +249,14 @@ impl UnitRegistry {
             .prefixed_root(name)
             .ok_or_else(|| ResolveError::UnknownIdentifier(name.to_owned()))?;
 
-        Ok(Arc::new(DefinedUnit::new(
+        let mut unit = DefinedUnit::new(
             self.prefixed_name(prefix, &root),
             root.dimensions,
             prefix.scale * root.scale,
             vec![],
-        )))
+        );
+        unit.kind = root.kind.clone();
+        Ok(Arc::new(unit))
     }
 }
 
