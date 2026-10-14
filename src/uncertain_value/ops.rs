@@ -362,8 +362,11 @@ impl UncertainValue {
         if let Some(elements) = &self.elements {
             return elements.iter().map(Self::sqrt).collect::<Result<Vec<_>, _>>().map(Self::from_elements);
         }
-        let uncertainties = self.uncertainty();
-        let valid = |v: f64, i| v >= 0.0 && (v != 0.0 || uncertainties.at(i) == 0.0);
+        // Inspect source contributions directly: squaring tiny uncertainties can
+        // underflow to zero even though the derivative at zero is undefined.
+        let valid = |v: f64, i| v >= 0.0 && (v != 0.0 || self.derivatives.iter().all(|(id, d)| {
+            d.at(i) == 0.0 || self.source_uncertainties[id].at(i) == 0.0
+        }));
         let valid = match &self.value {
             ValueType::Scalar(v) => valid(*v, 0),
             ValueType::Array(v) => v.iter().enumerate().all(|(i, &v)| valid(v, i)),

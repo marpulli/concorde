@@ -13,7 +13,7 @@ def test_sqrt_sources_and_zero():
     assert x[:0].sqrt().value.shape == (0,)
 
 
-@pytest.mark.parametrize("value,sigma", [(-1., 0.), (0., .1), (float("nan"), 0.)])
+@pytest.mark.parametrize("value,sigma", [(-1., 0.), (0., .1), (0., 1e-300), (float("nan"), 0.)])
 def test_invalid_square_roots(value, sigma):
     with pytest.raises(ValueError):
         UncertainValue(value, sigma).sqrt()
