@@ -1,6 +1,7 @@
 //! Versioned self-contained wire data. Source coordinates belong to the original
-//! source, never the current output position. Arrays share source definitions;
-//! derivative rows are sparse, not a dense output-by-source matrix.
+//! source, never the current output position. Scalars and arrays share source
+//! definitions and sparse derivative columns: one object per contributing source,
+//! with parallel output, coefficient, and (for array sources) coordinate vectors.
 //! Source identities are trusted to refer to immutable source definitions.
 use super::{UncertainValue, ValueType, VarId};
 use serde::{Deserialize, Serialize};
@@ -13,7 +14,7 @@ pub(crate) struct Payload {
     version: u32,
     value: Numbers,
     sources: Vec<Source>,
-    derivatives: Derivatives,
+    derivatives: Vec<Column>,
     variable_id: Option<String>,
 }
 
@@ -22,13 +23,6 @@ pub(crate) struct Payload {
 enum Numbers {
     Scalar(f64),
     Array(Vec<f64>),
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-enum Derivatives {
-    Scalar(Vec<Derivative>),
-    Array(Vec<Vec<Derivative>>),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -42,11 +36,12 @@ struct Source {
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Derivative {
+struct Column {
     source: usize,
-    coefficient: f64,
+    outputs: Vec<usize>,
+    coefficients: Vec<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    coordinate: Option<usize>,
+    coordinates: Option<Vec<usize>>,
 }
 
 fn finite(value: f64) -> Result<(), String> {
@@ -130,26 +125,34 @@ impl UncertainValue {
                 });
             }
         }
-        let mut encoded = Vec::new();
-        for row in rows {
-            let mut derivatives = Vec::new();
+        let mut derivatives: Vec<_> = sources
+            .iter()
+            .enumerate()
+            .map(|(source, definition)| Column {
+                source,
+                outputs: Vec::new(),
+                coefficients: Vec::new(),
+                coordinates: definition.indices.as_ref().map(|_| Vec::new()),
+            })
+            .collect();
+        for (output, row) in rows.into_iter().enumerate() {
+            let mut entries = Vec::new();
             for (id, coefficient) in row.derivatives {
                 let coefficient = coefficient.scalar();
                 finite(coefficient)?;
                 let (source, coordinate) = references[&id];
-                derivatives.push(Derivative {
-                    source,
-                    coordinate,
-                    coefficient,
-                });
+                entries.push((source, coordinate, coefficient));
             }
-            derivatives.sort_by_key(|d| (d.source, d.coordinate));
-            encoded.push(derivatives);
+            entries.sort_by_key(|&(source, coordinate, _)| (source, coordinate));
+            for (source, coordinate, coefficient) in entries {
+                let column = &mut derivatives[source];
+                column.outputs.push(output);
+                column.coefficients.push(coefficient);
+                if let Some(coordinates) = &mut column.coordinates {
+                    coordinates.push(coordinate.expect("Array source coordinate"));
+                }
+            }
         }
-        let derivatives = match &value {
-            Numbers::Scalar(_) => Derivatives::Scalar(encoded.pop().expect("Scalar row")),
-            Numbers::Array(_) => Derivatives::Array(encoded),
-        };
         Ok(Payload {
             version: 1,
             value,
@@ -202,43 +205,58 @@ impl UncertainValue {
             Numbers::Scalar(value) => vec![value],
             Numbers::Array(values) => values,
         };
-        let derivatives = match payload.derivatives {
-            Derivatives::Scalar(row) if !is_array => vec![row],
-            // [] is ambiguous under untagged decoding; only an empty array may
-            // interpret the empty scalar-row spelling as zero derivative rows.
-            Derivatives::Scalar(row) if values.is_empty() && row.is_empty() => vec![],
-            Derivatives::Array(rows) if is_array => rows,
-            _ => return Err("Derivative shape does not match values".into()),
-        };
-        if values.len() != derivatives.len() {
-            return Err("Derivative shape does not match values".into());
-        }
+        let mut rows: Vec<_> = values
+            .into_iter()
+            .map(|value| {
+                finite(value)?;
+                Ok(Self::from_computation(
+                    ValueType::Scalar(value),
+                    HashMap::new(),
+                    HashMap::new(),
+                ))
+            })
+            .collect::<Result<_, String>>()?;
         let mut used = HashSet::new();
-        let mut rows = Vec::new();
-        for (value, row) in values.into_iter().zip(derivatives) {
-            finite(value)?;
-            let mut coefficients = HashMap::new();
-            let mut source_uncertainties = HashMap::new();
-            for derivative in row {
-                finite(derivative.coefficient)?;
-                let id = *tables
-                    .get(derivative.source)
-                    .and_then(|table| table.get(&derivative.coordinate))
-                    .ok_or("Invalid source reference")?;
-                if coefficients
-                    .insert(id, ValueType::Scalar(derivative.coefficient))
+        let mut seen_columns = HashSet::new();
+        for column in payload.derivatives {
+            if column.outputs.len() != column.coefficients.len()
+                || column
+                    .coordinates
+                    .as_ref()
+                    .is_some_and(|coordinates| coordinates.len() != column.outputs.len())
+            {
+                return Err("Derivative column lengths do not match".into());
+            }
+            if !seen_columns.insert(column.source) {
+                return Err("Duplicate source column".into());
+            }
+            let table = tables
+                .get(column.source)
+                .ok_or("Invalid source reference")?;
+            for (i, (output, coefficient)) in column
+                .outputs
+                .into_iter()
+                .zip(column.coefficients)
+                .enumerate()
+            {
+                finite(coefficient)?;
+                let coordinate = column
+                    .coordinates
+                    .as_ref()
+                    .map(|coordinates| coordinates[i]);
+                let id = *table.get(&coordinate).ok_or("Invalid source coordinate")?;
+                let row = rows.get_mut(output).ok_or("Invalid output index")?;
+                if row
+                    .derivatives
+                    .insert(id, ValueType::Scalar(coefficient))
                     .is_some()
                 {
                     return Err("Duplicate derivative source".into());
                 }
-                source_uncertainties.insert(id, uncertainties[&id].clone());
+                row.source_uncertainties
+                    .insert(id, uncertainties[&id].clone());
                 used.insert(id);
             }
-            rows.push(Self::from_computation(
-                ValueType::Scalar(value),
-                coefficients,
-                source_uncertainties,
-            ));
         }
         if used.len() != uncertainties.len() {
             return Err("Unused source definition".into());

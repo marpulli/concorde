@@ -82,13 +82,14 @@ def test_length_one_broadcast_source_is_not_mistaken_for_distinct_coordinates():
     assert (result[0] - result[1]).uncertainty == pytest.approx(math.hypot(.1, .2))
 
 
-def test_source_table_is_shared_and_derivative_rows_are_sparse():
+def test_sources_and_derivatives_are_grouped_into_columns():
     x = UncertainValue(np.arange(100, dtype=float), .1)
     shifted = x + UncertainValue(1., .3)
     payload = json.loads(shifted.to_json())
     assert len(payload["sources"]) == 2
-    assert len(payload["derivatives"]) == 100
-    assert all(len(row) == 2 for row in payload["derivatives"])
+    assert len(payload["derivatives"]) == 2
+    assert all(column["outputs"] == list(range(100)) for column in payload["derivatives"])
+    assert all(column["coefficients"] == [1.] * 100 for column in payload["derivatives"])
     source = next(source for source in payload["sources"] if "indices" in source)
     assert source["indices"] == list(range(100))
     assert len(source["uncertainty"]) == 100
@@ -97,15 +98,15 @@ def test_source_table_is_shared_and_derivative_rows_are_sparse():
 @pytest.mark.parametrize("change", [
     lambda p: p["derivatives"].pop(),
     lambda p: p.update(derivatives=p["derivatives"][0]),
-    lambda p: p["derivatives"][0][0].update(coordinate=999),
-    lambda p: p["derivatives"][0][0].update(coordinate=None),
-    lambda p: p["derivatives"][0].append(p["derivatives"][0][0].copy()),
+    lambda p: p["derivatives"][0]["coordinates"].__setitem__(0, 999),
+    lambda p: p["derivatives"][0].update(coordinates=None),
+    lambda p: p["derivatives"].append(p["derivatives"][0].copy()),
     lambda p: p["sources"][0]["uncertainty"].pop(),
     lambda p: p["sources"][0]["indices"].__setitem__(1, 0),
     lambda p: p["sources"][0].update(index=0),
     lambda p: p["sources"][0].pop("indices"),
     lambda p: p["sources"][0]["uncertainty"].__setitem__(0, -1.),
-    lambda p: p["derivatives"][0][0].update(coefficient=2.),
+    lambda p: p["derivatives"][0]["coefficients"].__setitem__(0, 2.),
 ])
 def test_invalid_array_shapes_and_references(change):
     payload = json.loads(array().to_json())
@@ -141,7 +142,7 @@ def test_scalar_and_array_selections_share_source_encoding():
     selected = json.loads(x[2:3].to_json())
     assert scalar["sources"] == selected["sources"]
     assert scalar["sources"][0]["indices"] == [2]
-    assert scalar["derivatives"] == selected["derivatives"][0]
+    assert scalar["derivatives"] == selected["derivatives"]
     assert "index" not in scalar["sources"][0]
 
 
@@ -151,13 +152,14 @@ def test_scalar_combination_groups_coordinates_from_one_array_source():
     payload = json.loads(combined.to_json())
     assert payload["sources"] == json.loads(x[:2].to_json())["sources"]
     assert len(payload["sources"]) == 1
-    assert [d["coordinate"] for d in payload["derivatives"]] == [0, 1]
+    assert payload["derivatives"][0]["coordinates"] == [0, 1]
+    assert payload["derivatives"][0]["outputs"] == [0, 0]
     assert (restored(combined) - combined).uncertainty == pytest.approx(0.)
     assert restored(combined).to_json() == combined.to_json()
 
 
 def test_fixed_v1_array_fixture():
-    payload = {"version": 1, "value": [1., 2.], "sources": [{"id": "01900000-0000-7000-8000-000000000001", "uncertainty": [.1, .2], "indices": [0, 1]}], "derivatives": [[{"source": 0, "coefficient": 1., "coordinate": 0}], [{"source": 0, "coefficient": 1., "coordinate": 1}]], "variable_id": "01900000-0000-7000-8000-000000000001"}
+    payload = {"version": 1, "value": [1., 2.], "sources": [{"id": "01900000-0000-7000-8000-000000000001", "uncertainty": [.1, .2], "indices": [0, 1]}], "derivatives": [{"source": 0, "outputs": [0, 1], "coefficients": [1., 1.], "coordinates": [0, 1]}], "variable_id": "01900000-0000-7000-8000-000000000001"}
     loaded = UncertainValue.from_json(json.dumps(payload))
     assert json.loads(loaded.to_json()) == payload
     np.testing.assert_allclose(loaded.uncertainty, [.1, .2])
