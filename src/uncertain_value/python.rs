@@ -216,6 +216,13 @@ impl PyUncertainValue {
         Ok(Self { inner: self.inner.std(ddof).map_err(pyo3::exceptions::PyValueError::new_err)? })
     }
 
+    /// Median by nominal value, retaining the middle element's sources (or the
+    /// average of both middle elements). Ties retain input order. Empty arrays
+    /// and nonfinite values raise ValueError.
+    fn median(&self) -> PyResult<Self> {
+        Ok(Self { inner: self.inner.median().map_err(pyo3::exceptions::PyValueError::new_err)? })
+    }
+
     /// Arithmetic mean with correlated uncertainty. Empty arrays raise ValueError.
     fn mean(&self) -> PyResult<Self> {
         Ok(Self { inner: self.inner.mean().map_err(pyo3::exceptions::PyValueError::new_err)? })

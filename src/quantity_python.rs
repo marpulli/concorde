@@ -137,6 +137,12 @@ impl PyQuantity {
         Ok(Self { inner: Quantity::new(value, unit) })
     }
 
+    /// Median by nominal value, retaining the unit and selected source identities.
+    /// Ties retain input order, including for absolute affine quantities.
+    fn median(&self) -> PyResult<Self> {
+        Ok(Self { inner: Quantity::new(self.inner.value().median().map_err(pyo3::exceptions::PyValueError::new_err)?, self.inner.unit().clone()) })
+    }
+
     /// Arithmetic mean, retaining the unit (including absolute affine units).
     fn mean(&self) -> PyResult<Self> {
         Ok(Self { inner: Quantity::new(self.inner.value().mean().map_err(pyo3::exceptions::PyValueError::new_err)?, self.inner.unit().clone()) })
