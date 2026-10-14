@@ -190,7 +190,10 @@ impl UncertainValue {
             })
             .sum();
         match var {
-            ValueType::Scalar(s) => ValueType::Scalar(s.sqrt()),
+            ValueType::Scalar(s) => match &self.value {
+                ValueType::Scalar(_) => ValueType::Scalar(s.sqrt()),
+                ValueType::Array(values) => ValueType::Array(ArcArray::from_elem(values.dim(), s.sqrt())),
+            },
             ValueType::Array(a) => ValueType::Array(a.sqrt().into_shared()),
         }
     }
