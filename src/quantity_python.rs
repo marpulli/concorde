@@ -95,6 +95,14 @@ impl PyQuantity {
         })
     }
 
+    /// Convert to coherent SI units, preserving uncertainty and correlations.
+    /// Absolute temperatures include their offset; temperature differences do not.
+    fn to_base_unit(&self) -> PyResult<PyQuantity> {
+        Ok(PyQuantity {
+            inner: self.inner.to_base_unit()?,
+        })
+    }
+
     fn to(&self, unit: &PyUnit) -> PyResult<PyQuantity> {
         Ok(PyQuantity {
             inner: self.inner.to(&unit.inner)?,

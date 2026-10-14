@@ -60,6 +60,14 @@ where
     T: QuantityValue,
     for<'a> &'a T: Mul<f64, Output = T>,
 {
+    /// Convert to coherent SI units, preserving uncertainty and correlations.
+    pub fn to_base_unit(&self) -> Result<Quantity<T>, UnitError>
+    where
+        for<'a, 'b> &'a T: Add<&'b f64, Output = T>,
+    {
+        self.to(&self.unit.base_unit())
+    }
+
     /// Convert this quantity, preserving uncertainty through scale and offset.
     pub fn to(&self, target: &Unit) -> Result<Quantity<T>, UnitError>
     where
