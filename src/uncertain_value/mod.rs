@@ -185,7 +185,8 @@ impl UncertainValue {
             .iter()
             .filter_map(|(var_id, deriv)| {
                 let sigma = self.source_uncertainties.get(var_id)?;
-                Some(deriv.clone() * deriv.clone() * sigma.clone() * sigma.clone())
+                let contribution = deriv.clone() * sigma.clone();
+                Some(contribution.clone() * contribution)
             })
             .sum();
         match var {
