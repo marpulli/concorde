@@ -17,7 +17,7 @@ DIMENSIONS = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     ],
 )
 def test_duplicate_names_and_aliases_are_rejected(name, aliases, message):
-    registry = UnitRegistry()
+    registry = UnitRegistry(load_defaults=False)
     registry.define_unit("foo", DIMENSIONS, 1.0, aliases=["shared"])
     assert registry.parse("shared").components == {"foo": 1.0}
 
@@ -33,7 +33,7 @@ def test_duplicate_names_and_aliases_are_rejected(name, aliases, message):
 
 
 def test_toml_aliases_resolve_in_later_definitions():
-    registry = UnitRegistry()
+    registry = UnitRegistry(load_defaults=False)
     assert registry.load_definitions_from_string('''
 [[unit]]
 name = "foo"
@@ -48,7 +48,7 @@ unit = "shared / s"
 
 
 def test_toml_duplicate_alias_propagates_error():
-    registry = UnitRegistry()
+    registry = UnitRegistry(load_defaults=False)
     registry.define_unit("foo", DIMENSIONS, 1.0, aliases=["shared"])
     with pytest.raises(ValueError, match="Duplicate alias 'shared'"):
         registry.load_definitions_from_string('''
