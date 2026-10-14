@@ -12,7 +12,7 @@ impl ValueType {
     }
 
     /// Select from a broadcast value, retaining scalar inputs unchanged.
-    fn at(&self, index: usize) -> f64 {
+    pub(super) fn at(&self, index: usize) -> f64 {
         match self {
             Self::Scalar(value) => *value,
             Self::Array(values) => values[if values.len() == 1 { 0 } else { index }],

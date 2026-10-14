@@ -78,6 +78,9 @@ assert_type(AffineUnitError(), AffineUnitError)
 # Unnecessary-ignore diagnostics make these negative checks fail if stubs loosen.
 scalar[0]  # pyright: ignore[reportIndexIssue]
 quantity[0]  # pyright: ignore[reportIndexIssue]
+assert_type(array.sum(), UncertainValue[float])
+assert_type(scalar.sum(), UncertainValue[float])
+assert_type(array_quantity.sum(), Quantity[float])
 assert_type(array[:], UncertainValue[NDArray[np.float64]])
 assert_type(array[[True, False]], UncertainValue[NDArray[np.float64]])
 assert_type(array[np.array([True, False])], UncertainValue[NDArray[np.float64]])
