@@ -49,6 +49,29 @@ pub(crate) fn index_value(value: &UncertainValue, index: &Bound<'_, PyAny>) -> P
         .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Array index out of range"))
 }
 
+pub(crate) fn assign_value(value: &UncertainValue, mask: &Bound<'_, PyAny>, replacement: &UncertainValue) -> PyResult<UncertainValue> {
+    let ValueType::Array(values) = &value.value else {
+        return Err(pyo3::exceptions::PyTypeError::new_err("Scalar values cannot be assigned through a mask"));
+    };
+    let indices = mask_indices(mask, values.len())?.ok_or_else(|| pyo3::exceptions::PyTypeError::new_err("Assignment requires a boolean mask"))?;
+    value.replaced(&indices, replacement).map_err(pyo3::exceptions::PyValueError::new_err)
+}
+
+fn replacement_value(value: &Bound<'_, PyAny>) -> PyResult<UncertainValue> {
+    if let Ok(value) = value.extract::<PyRef<PyUncertainValue>>() {
+        return Ok(value.inner.clone());
+    }
+    let value = if let Ok(array) = value.cast::<PyArray1<f64>>() {
+        let readonly = array.try_readonly().map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Replacement array is currently in use"))?;
+        ValueType::Array(readonly.as_array().to_owned().into_shared())
+    } else if value.is_instance_of::<PyUntypedArray>() {
+        return Err(pyo3::exceptions::PyTypeError::new_err("Replacement array must be one-dimensional float64"));
+    } else {
+        ValueType::Scalar(value.extract::<f64>()?)
+    };
+    Ok(UncertainValue::from_computation(value, Default::default(), Default::default()))
+}
+
 /// Python wrapper for UncertainValue
 ///
 /// This struct provides Python bindings for the Rust UncertainValue type,
@@ -185,6 +208,16 @@ impl PyUncertainValue {
         self.inner.is_independent()
     }
 
+    /// Arithmetic mean with correlated uncertainty. Empty arrays raise ValueError.
+    fn mean(&self) -> PyResult<Self> {
+        Ok(Self { inner: self.inner.mean().map_err(pyo3::exceptions::PyValueError::new_err)? })
+    }
+
+    /// Sum all elements, preserving shared-source correlations. Empty arrays sum to zero.
+    fn sum(&self) -> Self {
+        Self { inner: self.inner.sum() }
+    }
+
     /// Serialize finite values and their source dependencies as versioned JSON.
     fn to_json(&self) -> PyResult<String> {
         self.inner.to_json().map_err(pyo3::exceptions::PyValueError::new_err)
@@ -200,6 +233,18 @@ impl PyUncertainValue {
         Ok(Self {
             inner: index_value(&self.inner, index)?,
         })
+    }
+
+    /// Assign uncertain or exact values through a boolean mask. Existing derived
+    /// values remain unchanged, and replacement source identities are retained.
+    fn __setitem__(slf: &Bound<'_, Self>, mask: &Bound<'_, PyAny>, replacement: &Bound<'_, PyAny>) -> PyResult<()> {
+        let result = {
+            let current = slf.try_borrow()?;
+            let replacement = replacement_value(replacement)?;
+            assign_value(&current.inner, mask, &replacement)?
+        };
+        slf.try_borrow_mut()?.inner = result;
+        Ok(())
     }
 
     /// Multiply this uncertain value by another value

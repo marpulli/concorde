@@ -113,6 +113,32 @@ impl PyQuantity {
         })
     }
 
+    /// Assign quantities through a boolean mask, converting to the target unit.
+    fn __setitem__(slf: &Bound<'_, Self>, mask: &Bound<'_, PyAny>, replacement: &Bound<'_, Self>) -> PyResult<()> {
+        let result = {
+            let current = slf.try_borrow()?;
+            let replacement = replacement.try_borrow()?;
+            let converted = replacement.inner.to(current.inner.unit())?;
+            Quantity::new(
+                crate::uncertain_value::assign_value(current.inner.value(), mask, converted.value())?,
+                current.inner.unit().clone(),
+            )
+        };
+        slf.try_borrow_mut()?.inner = result;
+        Ok(())
+    }
+
+    /// Arithmetic mean, retaining the unit (including absolute affine units).
+    fn mean(&self) -> PyResult<Self> {
+        Ok(Self { inner: Quantity::new(self.inner.value().mean().map_err(pyo3::exceptions::PyValueError::new_err)?, self.inner.unit().clone()) })
+    }
+
+    /// Sum all elements in this unit. Absolute affine units cannot be summed.
+    fn sum(&self) -> PyResult<Self> {
+        self.inner.unit().check_multiplicative("sum")?;
+        Ok(Self { inner: Quantity::new(self.inner.value().sum(), self.inner.unit().clone()) })
+    }
+
     /// Serialize this quantity's uncertainty sources and unit definitions.
     fn to_json(&self) -> PyResult<String> {
         self.inner.to_json().map_err(pyo3::exceptions::PyValueError::new_err)

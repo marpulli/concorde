@@ -78,11 +78,22 @@ assert_type(AffineUnitError(), AffineUnitError)
 # Unnecessary-ignore diagnostics make these negative checks fail if stubs loosen.
 scalar[0]  # pyright: ignore[reportIndexIssue]
 quantity[0]  # pyright: ignore[reportIndexIssue]
+assert_type(array.mean(), UncertainValue[float])
+assert_type(scalar.mean(), UncertainValue[float])
+assert_type(array_quantity.mean(), Quantity[float])
+assert_type(array.sum(), UncertainValue[float])
+assert_type(scalar.sum(), UncertainValue[float])
+assert_type(array_quantity.sum(), Quantity[float])
 assert_type(array[:], UncertainValue[NDArray[np.float64]])
 assert_type(array[[True, False]], UncertainValue[NDArray[np.float64]])
 assert_type(array[np.array([True, False])], UncertainValue[NDArray[np.float64]])
 assert_type(array_quantity[(True, False)], Quantity[NDArray[np.float64]])
 array[[1, 0]]  # pyright: ignore[reportArgumentType, reportCallIssue]
+array[[True, False]] = scalar
+array[np.array([True, False])] = values
+array_quantity[[True, False]] = quantity
+scalar[[True]] = scalar  # pyright: ignore[reportIndexIssue]
+array_quantity[[True, False]] = 1.0  # pyright: ignore[reportArgumentType]
 assert_type(array_quantity[::-1], Quantity[NDArray[np.float64]])
 quantity.to("cm")  # pyright: ignore[reportArgumentType]
 Quantity(2.0, metre)  # pyright: ignore[reportArgumentType]
