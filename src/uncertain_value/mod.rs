@@ -1,6 +1,7 @@
 mod ops;
 mod python;
 mod selection;
+mod serialization;
 
 use numpy::ndarray::ArcArray;
 use numpy::ndarray::Dim;
@@ -94,6 +95,12 @@ impl Sum for ValueType {
 pub struct UncertainValue {
     pub value: ValueType,
 
+    /// Selected/reordered arrays store sparse scalar rows. This avoids a dense
+    /// Jacobian while retaining source coordinates across arbitrary selections.
+    /// Rows are scalar and never contain further rows; ordinary arrays keep the
+    /// original compact vector representation in the two maps below.
+    elements: Option<std::sync::Arc<[UncertainValue]>>,
+
     // TOOD: cache the computed uncertainy value
     /// Variable ID is only present for independent variables
     pub variable_id: Option<VarId>,
@@ -119,6 +126,7 @@ impl UncertainValue {
 
         UncertainValue {
             value: ValueType::Scalar(value),
+            elements: None,
             variable_id: Some(id),
             derivatives,
             source_uncertainties,
@@ -137,6 +145,7 @@ impl UncertainValue {
 
         UncertainValue {
             value: ValueType::Array(value),
+            elements: None,
             variable_id: Some(id),
             derivatives,
             source_uncertainties,
@@ -150,6 +159,7 @@ impl UncertainValue {
     ) -> Self {
         UncertainValue {
             value,
+            elements: None,
             variable_id: None,
             derivatives,
             source_uncertainties,
@@ -165,6 +175,9 @@ impl UncertainValue {
     ///
     /// Formula: σ² = Σᵢ (∂f/∂xᵢ)² σᵢ²
     pub fn uncertainty(&self) -> ValueType {
+        if let Some(elements) = &self.elements {
+            return ValueType::Array(elements.iter().map(|e| e.uncertainty().scalar()).collect::<numpy::ndarray::Array1<_>>().into_shared());
+        }
         let var = self
             .derivatives
             .iter()

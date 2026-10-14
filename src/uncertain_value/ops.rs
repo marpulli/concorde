@@ -34,6 +34,28 @@ where
     DA: Fn(&ValueType, &ValueType) -> ValueType,
     DB: Fn(&ValueType, &ValueType) -> ValueType,
 {
+    binary_op_impl(a, b, &value_fn, &deriv_a_fn, &deriv_b_fn)
+}
+
+fn binary_op_impl(
+    a: &UncertainValue,
+    b: &UncertainValue,
+    value_fn: &dyn Fn(&ValueType, &ValueType) -> ValueType,
+    deriv_a_fn: &dyn Fn(&ValueType, &ValueType) -> ValueType,
+    deriv_b_fn: &dyn Fn(&ValueType, &ValueType) -> ValueType,
+) -> UncertainValue {
+    if a.elements.is_some() || b.elements.is_some() {
+        let length = match (&a.value, &b.value) {
+            (ValueType::Array(a), ValueType::Array(b)) => if a.len() == 1 { b.len() } else { a.len() },
+            (ValueType::Array(a), _) => a.len(),
+            (_, ValueType::Array(b)) => b.len(),
+            _ => unreachable!("Rows belong to array-valued operands"),
+        };
+        return UncertainValue::from_elements((0..length).map(|i| {
+            binary_op_impl(&a.broadcast_element(i), &b.broadcast_element(i), value_fn, deriv_a_fn, deriv_b_fn)
+        }).collect());
+    }
+
     // Match explicit indexed sources with their parent vector contributions.
     let aligned_a = a.align_sources(b);
     let aligned_b = b.align_sources(a);
@@ -220,6 +242,9 @@ impl Mul<f64> for &UncertainValue {
     type Output = UncertainValue;
 
     fn mul(self, scalar: f64) -> Self::Output {
+        if let Some(elements) = &self.elements {
+            return UncertainValue::from_elements(elements.iter().map(|e| e * scalar).collect());
+        }
         let value = mul_value_types(&self.value, &ValueType::Scalar(scalar));
 
         // For multiplication by scalar: d(a*c)/dx = c * da/dx
@@ -258,6 +283,9 @@ impl Add<&f64> for &UncertainValue {
     type Output = UncertainValue;
 
     fn add(self, scalar: &f64) -> Self::Output {
+        if let Some(elements) = &self.elements {
+            return UncertainValue::from_elements(elements.iter().map(|e| e + scalar).collect());
+        }
         UncertainValue::from_computation(
             self.value.clone() + ValueType::Scalar(*scalar),
             self.derivatives.clone(),
@@ -295,6 +323,9 @@ impl Neg for &UncertainValue {
 impl UncertainValue {
     /// First-order propagation; at signed zero retain its sign for the derivative.
     pub fn abs(&self) -> UncertainValue {
+        if let Some(elements) = &self.elements {
+            return UncertainValue::from_elements(elements.iter().map(Self::abs).collect());
+        }
         let (value, derivative) = match &self.value {
             ValueType::Scalar(v) => (ValueType::Scalar(v.abs()), ValueType::Scalar(v.signum())),
             ValueType::Array(v) => (
@@ -311,6 +342,9 @@ impl UncertainValue {
     }
 
     pub fn pow(&self, n: f64) -> UncertainValue {
+        if let Some(elements) = &self.elements {
+            return UncertainValue::from_elements(elements.iter().map(|e| e.pow(n)).collect());
+        }
         let value = self.value.powf(n);
 
         let df_da = self.value.powf(n - 1.0) * ValueType::Scalar(n);

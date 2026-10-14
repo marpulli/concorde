@@ -36,6 +36,8 @@ assert_type(scalar.value, float)
 assert_type(scalar.uncertainty, float)
 assert_type(scalar.variable_id, str | None)
 assert_type(scalar.is_independent(), bool)
+assert_type(scalar.to_json(), str)
+assert_type(UncertainValue.from_json(scalar.to_json()), UncertainValue[float])
 assert_type(array.value, NDArray[np.float64])
 assert_type(array.uncertainty, NDArray[np.float64])
 assert_type(array[0], UncertainValue[float])
@@ -74,7 +76,8 @@ assert_type(AffineUnitError(), AffineUnitError)
 # Unnecessary-ignore diagnostics make these negative checks fail if stubs loosen.
 scalar[0]  # pyright: ignore[reportIndexIssue]
 quantity[0]  # pyright: ignore[reportIndexIssue]
-array[:]  # pyright: ignore[reportArgumentType]
+assert_type(array[:], UncertainValue[NDArray[np.float64]])
+assert_type(array_quantity[::-1], Quantity[NDArray[np.float64]])
 quantity.to("cm")  # pyright: ignore[reportArgumentType]
 Quantity(2.0, metre)  # pyright: ignore[reportArgumentType]
 scalar.__add__(metre)  # pyright: ignore[reportArgumentType, reportCallIssue]

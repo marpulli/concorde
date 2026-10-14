@@ -33,7 +33,7 @@ def test_empty_and_scalar():
         UncertainValue(1.0, 0.1)[0]
 
 
-@pytest.mark.parametrize("index", [1.5, "1", slice(None), [0], np.array([True, False, True]), None, (0,)])
+@pytest.mark.parametrize("index", [1.5, "1", [0], np.array([True, False, True]), None, (0,)])
 def test_only_integer_indexing(index):
     with pytest.raises(TypeError):
         array()[index]
@@ -130,5 +130,4 @@ def test_quantity_indexing_retains_unit_and_conversion_correlations():
         quantity[3]
     with pytest.raises(TypeError):
         selected[0]
-    with pytest.raises(TypeError):
-        quantity[:]
+    assert quantity[:].unit == quantity.unit
