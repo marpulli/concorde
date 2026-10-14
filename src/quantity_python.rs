@@ -128,6 +128,15 @@ impl PyQuantity {
         Ok(())
     }
 
+    /// Standard deviation with N-ddof; absolute affine inputs yield delta units.
+    /// Shares UncertainValue.std's validation and first-order uncertainty semantics.
+    #[pyo3(signature = (ddof=0.0))]
+    fn std(&self, ddof: f64) -> PyResult<Self> {
+        let unit = self.inner.unit().subtraction(self.inner.unit())?.result;
+        let value = self.inner.value().std(ddof).map_err(pyo3::exceptions::PyValueError::new_err)?;
+        Ok(Self { inner: Quantity::new(value, unit) })
+    }
+
     /// Arithmetic mean, retaining the unit (including absolute affine units).
     fn mean(&self) -> PyResult<Self> {
         Ok(Self { inner: Quantity::new(self.inner.value().mean().map_err(pyo3::exceptions::PyValueError::new_err)?, self.inner.unit().clone()) })
