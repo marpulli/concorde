@@ -29,9 +29,16 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 
+[tool.pyright]
+include = ["python", "tests/typing"]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+reportUnnecessaryTypeIgnoreComment = "error"
+
 [dependency-groups]
 dev = [
     "ipython>=8.12.3",
+    "pyright>=1.1.414",
     "pytest>=8.3.5",
     "uncertainties>=3.2.3",
 ]

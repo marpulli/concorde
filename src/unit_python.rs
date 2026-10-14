@@ -81,6 +81,31 @@ impl PyUnit {
     fn get_exponent(&self, name: &str) -> Option<f64> {
         self.inner.get_exponent(&name.to_string())
     }
+
+    /// Whether this unit represents an absolute value with an affine origin.
+    #[getter]
+    fn is_affine(&self) -> bool {
+        self.inner.is_affine()
+    }
+
+    /// Whether this unit contains a delta (difference) component.
+    #[getter]
+    fn is_delta(&self) -> bool {
+        self.inner.is_delta()
+    }
+
+    /// Exponents of length, mass, time, current, temperature, substance, luminosity.
+    #[getter]
+    fn dimensions(&self) -> (f64, f64, f64, f64, f64, f64, f64) {
+        let [length, mass, time, current, temperature, substance, luminosity] =
+            self.inner.dimensions();
+        (length, mass, time, current, temperature, substance, luminosity)
+    }
+
+    /// Check dimensions only; affine/delta conversion restrictions still apply.
+    fn is_compatible(&self, other: &PyUnit) -> bool {
+        self.inner.is_compatible(&other.inner)
+    }
 }
 
 #[pyclass(name = "UnitRegistry")]

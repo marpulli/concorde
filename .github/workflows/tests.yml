@@ -35,3 +35,9 @@ jobs:
       - name: Install dependencies and build the Rust extension
         run: uv sync --locked --group dev
       - run: uv run --no-sync pytest
+      - run: uv run --no-sync pyright
+      - run: uv run --no-sync pyright --verifytypes concorde --ignoreexternal
+      - name: Check typing resources in the wheel
+        run: |
+          uv build --wheel --out-dir target/typing-wheel
+          uv run --no-sync python tests/check_wheel_typing.py target/typing-wheel
