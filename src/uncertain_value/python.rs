@@ -2,6 +2,27 @@ use super::{NumpyArray1D, UncertainValue, ValueType};
 use numpy::{PyArray1, PyArrayMethods, PyUntypedArray, PyUntypedArrayMethods};
 use pyo3::{IntoPyObjectExt, prelude::*};
 
+/// Validate masks once for both selection and assignment. Integer fancy indexing
+/// is deliberately separate from boolean filtering and is not supported here.
+pub(crate) fn mask_indices(index: &Bound<'_, PyAny>, length: usize) -> PyResult<Option<Vec<usize>>> {
+    let mask = if let Ok(array) = index.cast::<PyArray1<bool>>() {
+        let readonly = array.try_readonly().map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Mask is currently in use"))?;
+        Some(readonly.as_array().iter().copied().collect::<Vec<_>>())
+    } else if index.is_instance_of::<pyo3::types::PyList>() || index.is_instance_of::<pyo3::types::PyTuple>() {
+        Some(index.extract::<Vec<bool>>()?)
+    } else if index.is_instance_of::<PyUntypedArray>() {
+        return Err(pyo3::exceptions::PyTypeError::new_err("Mask must be a one-dimensional boolean array"));
+    } else {
+        None
+    };
+    mask.map(|mask| {
+        if mask.len() != length {
+            return Err(pyo3::exceptions::PyIndexError::new_err("Boolean mask must match the array length"));
+        }
+        Ok(mask.into_iter().enumerate().filter_map(|(i, keep)| keep.then_some(i)).collect())
+    }).transpose()
+}
+
 pub(crate) fn index_value(value: &UncertainValue, index: &Bound<'_, PyAny>) -> PyResult<UncertainValue> {
     let ValueType::Array(values) = &value.value else {
         return Err(pyo3::exceptions::PyTypeError::new_err(
@@ -13,6 +34,9 @@ pub(crate) fn index_value(value: &UncertainValue, index: &Bound<'_, PyAny>) -> P
         let slice = slice.indices(values.len() as isize)?;
         let indices: Vec<_> = (0..slice.slicelength).map(|i| (slice.start + i as isize * slice.step) as usize).collect();
         return Ok(value.select(&indices).expect("Validated slice indices"));
+    }
+    if let Some(indices) = mask_indices(index, values.len())? {
+        return Ok(value.select(&indices).expect("Validated mask indices"));
     }
     let index = index.extract::<isize>()?;
     let index = if index < 0 {
@@ -171,7 +195,7 @@ impl PyUncertainValue {
         Ok(Self { inner: UncertainValue::from_json(json).map_err(pyo3::exceptions::PyValueError::new_err)? })
     }
 
-    /// Select an array element or slice, preserving its uncertainty sources.
+    /// Select an array element, slice, or boolean mask, preserving source identities.
     fn __getitem__(&self, index: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok(Self {
             inner: index_value(&self.inner, index)?,

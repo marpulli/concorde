@@ -79,6 +79,10 @@ assert_type(AffineUnitError(), AffineUnitError)
 scalar[0]  # pyright: ignore[reportIndexIssue]
 quantity[0]  # pyright: ignore[reportIndexIssue]
 assert_type(array[:], UncertainValue[NDArray[np.float64]])
+assert_type(array[[True, False]], UncertainValue[NDArray[np.float64]])
+assert_type(array[np.array([True, False])], UncertainValue[NDArray[np.float64]])
+assert_type(array_quantity[(True, False)], Quantity[NDArray[np.float64]])
+array[[1, 0]]  # pyright: ignore[reportArgumentType, reportCallIssue]
 assert_type(array_quantity[::-1], Quantity[NDArray[np.float64]])
 quantity.to("cm")  # pyright: ignore[reportArgumentType]
 Quantity(2.0, metre)  # pyright: ignore[reportArgumentType]
