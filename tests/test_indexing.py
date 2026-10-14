@@ -33,8 +33,8 @@ def test_empty_and_scalar():
         UncertainValue(1.0, 0.1)[0]
 
 
-@pytest.mark.parametrize("index", [1.5, "1", [0], np.array([True, False, True]), None, (0,)])
-def test_only_integer_indexing(index):
+@pytest.mark.parametrize("index", [1.5, "1", [0], None, (0,)])
+def test_unsupported_index_types(index):
     with pytest.raises(TypeError):
         array()[index]
 
