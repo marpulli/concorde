@@ -23,6 +23,20 @@ python-source = "python"
 module-name = "concorde._concorde"
 features = ["pyo3/extension-module"]
 
+# Editable installs must rebuild the native extension when Rust sources change,
+# including when a consumer updates its pinned submodule without a version bump.
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "Cargo.lock" },
+    { file = "src/**/*.rs" },
+    { file = "src/**/*.toml" },
+    { file = "python/**/*.py" },
+    { file = "python/**/*.pyi" },
+    { git = { commit = true } },
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
