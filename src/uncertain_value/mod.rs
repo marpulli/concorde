@@ -1,6 +1,8 @@
 mod ops;
 mod python;
 mod selection;
+mod serialization;
+mod source_consistency;
 
 use numpy::ndarray::ArcArray;
 use numpy::ndarray::Dim;

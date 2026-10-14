@@ -36,6 +36,7 @@ pub struct PyUncertainValue {
 
 impl PyUncertainValue {
     fn check_binary_shapes(&self, other: &Self) -> PyResult<()> {
+        self.inner.ensure_consistent_sources(&other.inner).map_err(pyo3::exceptions::PyValueError::new_err)?;
         if let (ValueType::Array(lhs), ValueType::Array(rhs)) =
             (&self.inner.value, &other.inner.value)
         {
@@ -159,6 +160,16 @@ impl PyUncertainValue {
     ///     bool: True if this is an independent variable, False if computed
     fn is_independent(&self) -> bool {
         self.inner.is_independent()
+    }
+
+    /// Serialize finite values and their source dependencies as versioned JSON.
+    fn to_json(&self) -> PyResult<String> {
+        self.inner.to_json().map_err(pyo3::exceptions::PyValueError::new_err)
+    }
+
+    #[staticmethod]
+    fn from_json(json: &str) -> PyResult<Self> {
+        Ok(Self { inner: UncertainValue::from_json(json).map_err(pyo3::exceptions::PyValueError::new_err)? })
     }
 
     /// Select an array element or slice, preserving its uncertainty sources.
