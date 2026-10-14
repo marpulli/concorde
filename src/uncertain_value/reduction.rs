@@ -128,6 +128,37 @@ impl UncertainValue {
         Ok(self.reduce_with_gradient(scale * normalized_std, |i| gradient[i]))
     }
 
+    /// Median ordered by nominal value. Ties retain input order; uncertainty
+    /// follows the selected middle element(s), not possible changes in rank.
+    pub(crate) fn median(&self) -> Result<Self, &'static str> {
+        let ValueType::Array(values) = &self.value else {
+            return if self.value.scalar().is_finite() {
+                Ok(self.clone())
+            } else {
+                Err("Median requires finite values")
+            };
+        };
+        if values.is_empty() {
+            return Err("Median requires at least one element");
+        }
+        if values.iter().any(|v| !v.is_finite()) {
+            return Err("Median requires finite values");
+        }
+        let mut order = (0..values.len()).collect::<Vec<_>>();
+        order.sort_by(|&a, &b| values[a].partial_cmp(&values[b]).unwrap());
+        let middle = values.len() / 2;
+        let upper = self.element(order[middle]).unwrap();
+        if values.len() % 2 == 1 {
+            Ok(upper)
+        } else {
+            let lower = self.element(order[middle - 1]).unwrap();
+            let mut result = &(&lower * 0.5) + &(&upper * 0.5);
+            // Avoid overflow in a+b and underflow in a/2+b/2.
+            result.value = ValueType::Scalar(lower.value.scalar().midpoint(upper.value.scalar()));
+            Ok(result)
+        }
+    }
+
     /// Arithmetic mean; undefined for an empty collection.
     pub(crate) fn mean(&self) -> Result<Self, &'static str> {
         match &self.value {
