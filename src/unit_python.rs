@@ -110,7 +110,7 @@ impl PyUnit {
 
 #[pyclass(name = "UnitRegistry")]
 pub struct PyUnitRegistry {
-    inner: UnitRegistry,
+    pub(crate) inner: UnitRegistry,
 }
 
 #[pymethods]

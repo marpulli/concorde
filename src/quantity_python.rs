@@ -1,6 +1,6 @@
 use crate::quantity::Quantity;
 use crate::uncertain_value::{PyUncertainValue, UncertainValue};
-use crate::unit_python::PyUnit;
+use crate::unit_python::{PyUnit, PyUnitRegistry};
 use pyo3::prelude::*;
 
 #[pyclass(name = "Quantity")]
@@ -110,6 +110,19 @@ impl PyQuantity {
                 crate::uncertain_value::index_value(self.inner.value(), index)?,
                 self.inner.unit().clone(),
             ),
+        })
+    }
+
+    /// Serialize this quantity's uncertainty sources and unit definitions.
+    fn to_json(&self) -> PyResult<String> {
+        self.inner.to_json().map_err(pyo3::exceptions::PyValueError::new_err)
+    }
+
+    /// Restore using an explicit registry; missing or changed definitions fail.
+    #[staticmethod]
+    fn from_json(json: &str, registry: &PyUnitRegistry) -> PyResult<Self> {
+        Ok(Self {
+            inner: Quantity::from_json(json, &registry.inner).map_err(pyo3::exceptions::PyValueError::new_err)?,
         })
     }
 
