@@ -1,5 +1,6 @@
 mod ops;
 mod python;
+mod selection;
 
 use numpy::ndarray::ArcArray;
 use numpy::ndarray::Dim;
@@ -12,13 +13,31 @@ use uuid::Uuid;
 
 // Re-export the Python bindings
 pub use python::PyUncertainValue;
+pub(crate) use python::index_value;
 
 pub type NumpyArray1D = ArcArray<f64, Dim<[usize; 1]>>;
 
-pub type VarId = Uuid;
+/// A source variable, optionally narrowed to one independent array element.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VarId {
+    root: Uuid,
+    element: Option<usize>,
+}
+
+impl std::fmt::Display for VarId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.element {
+            Some(index) => write!(f, "{}[{index}]", self.root),
+            None => write!(f, "{}", self.root),
+        }
+    }
+}
 
 fn generate_unique_id() -> VarId {
-    Uuid::now_v7()
+    VarId {
+        root: Uuid::now_v7(),
+        element: None,
+    }
 }
 
 #[derive(Debug, Clone)]

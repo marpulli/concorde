@@ -2,6 +2,22 @@ use super::{NumpyArray1D, UncertainValue, ValueType};
 use numpy::{PyArray1, PyArrayMethods, PyUntypedArray, PyUntypedArrayMethods};
 use pyo3::{IntoPyObjectExt, prelude::*};
 
+pub(crate) fn index_value(value: &UncertainValue, index: isize) -> PyResult<UncertainValue> {
+    let ValueType::Array(values) = &value.value else {
+        return Err(pyo3::exceptions::PyTypeError::new_err(
+            "Scalar values cannot be indexed",
+        ));
+    };
+    let index = if index < 0 {
+        values.len().checked_add_signed(index)
+    } else {
+        Some(index as usize)
+    };
+    index
+        .and_then(|index| value.element(index))
+        .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("Array index out of range"))
+}
+
 /// Python wrapper for UncertainValue
 ///
 /// This struct provides Python bindings for the Rust UncertainValue type,
@@ -136,6 +152,13 @@ impl PyUncertainValue {
     ///     bool: True if this is an independent variable, False if computed
     fn is_independent(&self) -> bool {
         self.inner.is_independent()
+    }
+
+    /// Select one array element, preserving its uncertainty sources.
+    fn __getitem__(&self, index: isize) -> PyResult<Self> {
+        Ok(Self {
+            inner: index_value(&self.inner, index)?,
+        })
     }
 
     /// Multiply this uncertain value by another value

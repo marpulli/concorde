@@ -34,6 +34,12 @@ where
     DA: Fn(&ValueType, &ValueType) -> ValueType,
     DB: Fn(&ValueType, &ValueType) -> ValueType,
 {
+    // Match explicit indexed sources with their parent vector contributions.
+    let aligned_a = a.align_sources(b);
+    let aligned_b = b.align_sources(a);
+    let a = &aligned_a;
+    let b = &aligned_b;
+
     // Compute result value
     let value = value_fn(&a.value, &b.value);
 

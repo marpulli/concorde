@@ -38,6 +38,8 @@ assert_type(scalar.variable_id, str | None)
 assert_type(scalar.is_independent(), bool)
 assert_type(array.value, NDArray[np.float64])
 assert_type(array.uncertainty, NDArray[np.float64])
+assert_type(array[0], UncertainValue[float])
+assert_type(array[np.int64(-1)].value, float)
 assert_type(UncertainValue(values, values).value, NDArray[np.float64])
 assert_type((scalar + scalar - 1.0).value, float)
 assert_type((scalar * array).value, NDArray[np.float64])
@@ -53,6 +55,7 @@ assert_type(quantity.unit, Unit)
 assert_type(quantity.to(centimetre).value.value, float)
 assert_type(quantity.to_base_unit().value.value, float)
 assert_type(array_quantity.to_base_unit().value.value, NDArray[np.float64])
+assert_type(array_quantity[0], Quantity[float])
 assert_type(array_quantity.to(centimetre).value.value, NDArray[np.float64])
 assert_type((quantity + array_quantity).value.value, NDArray[np.float64])
 assert_type((array_quantity - quantity).value.value, NDArray[np.float64])
@@ -69,6 +72,9 @@ assert_type(IncompatibleUnitError(), IncompatibleUnitError)
 assert_type(AffineUnitError(), AffineUnitError)
 
 # Unnecessary-ignore diagnostics make these negative checks fail if stubs loosen.
+scalar[0]  # pyright: ignore[reportIndexIssue]
+quantity[0]  # pyright: ignore[reportIndexIssue]
+array[:]  # pyright: ignore[reportArgumentType]
 quantity.to("cm")  # pyright: ignore[reportArgumentType]
 Quantity(2.0, metre)  # pyright: ignore[reportArgumentType]
 scalar.__add__(metre)  # pyright: ignore[reportArgumentType, reportCallIssue]
