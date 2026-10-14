@@ -181,6 +181,21 @@ impl Unit {
         }
     }
 
+    /// Coherent SI target for these dimensions; mass is expressed in kg, not g.
+    pub(crate) fn base_unit(&self) -> Unit {
+        static BASE_UNITS: std::sync::OnceLock<[Arc<DefinedUnit>; 7]> =
+            std::sync::OnceLock::new();
+        let bases = BASE_UNITS.get_or_init(|| {
+            let names = ["m", "kg", "s", "A", "K", "mol", "cd"];
+            std::array::from_fn(|i| {
+                let mut dimensions = [0.0; 7];
+                dimensions[i] = 1.0;
+                Arc::new(DefinedUnit::new(names[i].into(), dimensions, 1.0, vec![]))
+            })
+        });
+        Unit::new(bases.iter().cloned().zip(self.dimensions()).collect())
+    }
+
     pub fn pow(&self, power: f64) -> Result<Unit, UnitError> {
         self.check_multiplicative("exponentiation")?;
         Ok(Unit::new(
