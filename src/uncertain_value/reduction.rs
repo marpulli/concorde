@@ -65,6 +65,21 @@ impl UncertainValue {
         )
     }
 
+    /// Arithmetic mean; undefined for an empty collection.
+    pub(crate) fn mean(&self) -> Result<Self, &'static str> {
+        match &self.value {
+            ValueType::Scalar(_) => Ok(self.clone()),
+            ValueType::Array(values) => {
+                if values.is_empty() {
+                    return Err("Mean requires at least one element");
+                }
+                let weight = 1.0 / values.len() as f64;
+                let value = values.iter().map(|v| v * weight).sum();
+                Ok(self.reduce_with_gradient(value, |_| weight))
+            }
+        }
+    }
+
     /// Sum all outputs; the empty sum is the exact scalar zero.
     pub(crate) fn sum(&self) -> Self {
         match &self.value {

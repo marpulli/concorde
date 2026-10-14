@@ -128,6 +128,11 @@ impl PyQuantity {
         Ok(())
     }
 
+    /// Arithmetic mean, retaining the unit (including absolute affine units).
+    fn mean(&self) -> PyResult<Self> {
+        Ok(Self { inner: Quantity::new(self.inner.value().mean().map_err(pyo3::exceptions::PyValueError::new_err)?, self.inner.unit().clone()) })
+    }
+
     /// Sum all elements in this unit. Absolute affine units cannot be summed.
     fn sum(&self) -> PyResult<Self> {
         self.inner.unit().check_multiplicative("sum")?;
