@@ -104,7 +104,7 @@ def test_non_json_numbers_rejected(value, uncertainty):
 
 
 def test_v1_fixture_and_deterministic_encoding():
-    payload = '{"version":1,"value":3.0,"sources":[{"id":"01900000-0000-7000-8000-000000000001","index":null,"uncertainty":0.2}],"derivatives":[{"source":0,"coefficient":1.0}],"variable_id":"01900000-0000-7000-8000-000000000001"}'
+    payload = '{"version":1,"value":3.0,"sources":[{"id":"01900000-0000-7000-8000-000000000001","uncertainty":0.2}],"derivatives":[{"source":0,"coefficient":1.0}],"variable_id":"01900000-0000-7000-8000-000000000001"}'
     loaded = UncertainValue.from_json(payload)
     assert loaded.to_json() == payload
     assert restored(loaded).to_json() == payload

@@ -35,7 +35,6 @@ enum Derivatives {
 #[serde(deny_unknown_fields)]
 struct Source {
     id: String,
-    index: Option<usize>,
     uncertainty: Numbers,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     indices: Option<Vec<usize>>,
@@ -83,75 +82,52 @@ impl UncertainValue {
         }
         let mut sources = Vec::new();
         let mut references = HashMap::new();
-        match &value {
-            Numbers::Scalar(_) => {
-                // Preserve the original scalar v1 encoding, including fixtures.
-                let mut ids: Vec<_> = self.derivatives.keys().copied().collect();
-                ids.sort_by_key(|id| (id.root, id.element));
-                for id in ids {
-                    let uncertainty = self.source_uncertainties[&id].scalar();
-                    sigma(uncertainty)?;
-                    references.insert(id, (sources.len(), None));
-                    sources.push(Source {
-                        id: id.root.to_string(),
-                        index: id.element,
-                        uncertainty: Numbers::Scalar(uncertainty),
-                        indices: None,
-                    });
-                }
+        let mut grouped: BTreeMap<(Uuid, bool), BTreeMap<Option<usize>, f64>> = BTreeMap::new();
+        for row in &rows {
+            for id in row.derivatives.keys() {
+                let uncertainty = row.source_uncertainties[id].scalar();
+                sigma(uncertainty)?;
+                grouped
+                    .entry((id.root, id.element.is_some()))
+                    .or_default()
+                    .insert(id.element, uncertainty);
             }
-            Numbers::Array(_) => {
-                let mut grouped: BTreeMap<(Uuid, bool), BTreeMap<Option<usize>, f64>> =
-                    BTreeMap::new();
-                for row in &rows {
-                    for id in row.derivatives.keys() {
-                        let uncertainty = row.source_uncertainties[id].scalar();
-                        sigma(uncertainty)?;
-                        grouped
-                            .entry((id.root, id.element.is_some()))
-                            .or_default()
-                            .insert(id.element, uncertainty);
-                    }
+        }
+        for ((root, _), entries) in grouped {
+            let source = sources.len();
+            if let Some(&uncertainty) = entries.get(&None) {
+                references.insert(
+                    VarId {
+                        root,
+                        element: None,
+                    },
+                    (source, None),
+                );
+                sources.push(Source {
+                    id: root.to_string(),
+                    uncertainty: Numbers::Scalar(uncertainty),
+                    indices: None,
+                });
+            } else {
+                let mut indices = Vec::new();
+                let mut uncertainties = Vec::new();
+                for (index, uncertainty) in entries {
+                    let index = index.expect("Array source coordinate");
+                    references.insert(
+                        VarId {
+                            root,
+                            element: Some(index),
+                        },
+                        (source, Some(index)),
+                    );
+                    indices.push(index);
+                    uncertainties.push(uncertainty);
                 }
-                for ((root, _), entries) in grouped {
-                    let source = sources.len();
-                    if let Some(&uncertainty) = entries.get(&None) {
-                        references.insert(
-                            VarId {
-                                root,
-                                element: None,
-                            },
-                            (source, None),
-                        );
-                        sources.push(Source {
-                            id: root.to_string(),
-                            index: None,
-                            uncertainty: Numbers::Scalar(uncertainty),
-                            indices: None,
-                        });
-                    } else {
-                        let mut indices = Vec::new();
-                        let mut uncertainties = Vec::new();
-                        for (index, uncertainty) in entries {
-                            let index = index.expect("Array source coordinate");
-                            references.insert(
-                                VarId {
-                                    root,
-                                    element: Some(index),
-                                },
-                                (source, Some(index)),
-                            );
-                            indices.push(index);
-                            uncertainties.push(uncertainty);
-                        }
-                        sources.push(Source {
-                            id: root.to_string(),
-                            index: None,
-                            uncertainty: Numbers::Array(uncertainties),
-                            indices: Some(indices),
-                        });
-                    }
-                }
+                sources.push(Source {
+                    id: root.to_string(),
+                    uncertainty: Numbers::Array(uncertainties),
+                    indices: Some(indices),
+                });
             }
         }
         let mut encoded = Vec::new();
@@ -195,11 +171,9 @@ impl UncertainValue {
         for source in payload.sources {
             let root = Uuid::parse_str(&source.id).map_err(|e| e.to_string())?;
             let entries = match (source.uncertainty, source.indices) {
-                (Numbers::Scalar(uncertainty), None) => vec![(None, source.index, uncertainty)],
+                (Numbers::Scalar(uncertainty), None) => vec![(None, None, uncertainty)],
                 (Numbers::Array(uncertainties), Some(indices))
-                    if source.index.is_none()
-                        && uncertainties.len() == indices.len()
-                        && !indices.is_empty() =>
+                    if uncertainties.len() == indices.len() && !indices.is_empty() =>
                 {
                     indices
                         .into_iter()

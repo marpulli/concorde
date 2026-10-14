@@ -135,8 +135,29 @@ print(selected.to_json())
     np.testing.assert_allclose((UncertainValue.from_json(result.stdout) - x[::-1]).uncertainty, 0.)
 
 
+def test_scalar_and_array_selections_share_source_encoding():
+    x = array()
+    scalar = json.loads(x[2].to_json())
+    selected = json.loads(x[2:3].to_json())
+    assert scalar["sources"] == selected["sources"]
+    assert scalar["sources"][0]["indices"] == [2]
+    assert scalar["derivatives"] == selected["derivatives"][0]
+    assert "index" not in scalar["sources"][0]
+
+
+def test_scalar_combination_groups_coordinates_from_one_array_source():
+    x = array()
+    combined = x[0] + 2*x[1]
+    payload = json.loads(combined.to_json())
+    assert payload["sources"] == json.loads(x[:2].to_json())["sources"]
+    assert len(payload["sources"]) == 1
+    assert [d["coordinate"] for d in payload["derivatives"]] == [0, 1]
+    assert (restored(combined) - combined).uncertainty == pytest.approx(0.)
+    assert restored(combined).to_json() == combined.to_json()
+
+
 def test_fixed_v1_array_fixture():
-    payload = {"version": 1, "value": [1., 2.], "sources": [{"id": "01900000-0000-7000-8000-000000000001", "index": None, "uncertainty": [.1, .2], "indices": [0, 1]}], "derivatives": [[{"source": 0, "coefficient": 1., "coordinate": 0}], [{"source": 0, "coefficient": 1., "coordinate": 1}]], "variable_id": "01900000-0000-7000-8000-000000000001"}
+    payload = {"version": 1, "value": [1., 2.], "sources": [{"id": "01900000-0000-7000-8000-000000000001", "uncertainty": [.1, .2], "indices": [0, 1]}], "derivatives": [[{"source": 0, "coefficient": 1., "coordinate": 0}], [{"source": 0, "coefficient": 1., "coordinate": 1}]], "variable_id": "01900000-0000-7000-8000-000000000001"}
     loaded = UncertainValue.from_json(json.dumps(payload))
     assert json.loads(loaded.to_json()) == payload
     np.testing.assert_allclose(loaded.uncertainty, [.1, .2])
