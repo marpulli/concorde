@@ -166,6 +166,20 @@ impl PyUncertainValue {
         ))
     }
 
+    /// Construct an exact scalar or array without creating uncertainty sources.
+    #[staticmethod]
+    fn exact(value: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let value = if let Ok(array) = value.cast::<PyArray1<f64>>() {
+            let readonly = array.try_readonly().map_err(|_| pyo3::exceptions::PyRuntimeError::new_err("Value array is currently in use"))?;
+            ValueType::Array(readonly.as_array().to_owned().into_shared())
+        } else if value.is_instance_of::<PyUntypedArray>() {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Value array must be one-dimensional float64"));
+        } else {
+            ValueType::Scalar(value.extract::<f64>()?)
+        };
+        Ok(Self { inner: UncertainValue::from_computation(value, Default::default(), Default::default()) })
+    }
+
     /// Assemble scalar values without replacing their source identities.
     #[staticmethod]
     fn from_scalars(values: Vec<PyRef<'_, Self>>) -> PyResult<Self> {
