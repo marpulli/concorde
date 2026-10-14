@@ -103,6 +103,16 @@ impl PyQuantity {
         })
     }
 
+    /// Select one array element, retaining the unit and uncertainty sources.
+    fn __getitem__(&self, index: isize) -> PyResult<PyQuantity> {
+        Ok(PyQuantity {
+            inner: Quantity::new(
+                crate::uncertain_value::index_value(self.inner.value(), index)?,
+                self.inner.unit().clone(),
+            ),
+        })
+    }
+
     fn to(&self, unit: &PyUnit) -> PyResult<PyQuantity> {
         Ok(PyQuantity {
             inner: self.inner.to(&unit.inner)?,
