@@ -166,6 +166,18 @@ impl PyUncertainValue {
         ))
     }
 
+    /// Assemble scalar values without replacing their source identities.
+    #[staticmethod]
+    fn from_scalars(values: Vec<PyRef<'_, Self>>) -> PyResult<Self> {
+        let values = values.into_iter().map(|value| {
+            if !matches!(value.inner.value, ValueType::Scalar(_)) {
+                return Err(pyo3::exceptions::PyTypeError::new_err("from_scalars requires scalar values"));
+            }
+            Ok(value.inner.clone())
+        }).collect::<PyResult<Vec<_>>>()?;
+        Ok(Self { inner: UncertainValue::from_elements(values) })
+    }
+
     /// Get the value component
     ///
     /// Returns:
