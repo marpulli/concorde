@@ -46,6 +46,25 @@ impl UncertainValue {
             .map(Self::from_elements)
     }
 
+    /// Replace validated positions without changing any existing source definition.
+    /// Construction is transactional: callers swap in the result only on success.
+    pub(crate) fn replaced(&self, indices: &[usize], replacement: &Self) -> Result<Self, &'static str> {
+        let ValueType::Array(values) = &self.value else {
+            return Err("Scalar values cannot be assigned through a mask");
+        };
+        if let ValueType::Array(rhs) = &replacement.value {
+            if rhs.len() != 1 && rhs.len() != indices.len() {
+                return Err("Replacement length must be one or the number of selected elements");
+            }
+        }
+        let mut elements = (0..values.len()).map(|i| self.element(i).unwrap()).collect::<Vec<_>>();
+        for (j, &i) in indices.iter().enumerate() {
+            let slot = elements.get_mut(i).ok_or("Assignment index out of range")?;
+            *slot = replacement.broadcast_element(j);
+        }
+        Ok(Self::from_elements(elements))
+    }
+
     /// Select a broadcast operand for elementwise arithmetic.
     pub(super) fn broadcast_element(&self, index: usize) -> Self {
         match &self.value {

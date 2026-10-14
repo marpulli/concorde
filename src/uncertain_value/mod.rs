@@ -15,7 +15,7 @@ use uuid::Uuid;
 // Re-export the Python bindings
 pub use python::PyUncertainValue;
 pub(crate) use serialization::Payload as UncertainValuePayload;
-pub(crate) use python::index_value;
+pub(crate) use python::{assign_value, index_value};
 
 pub type NumpyArray1D = ArcArray<f64, Dim<[usize; 1]>>;
 

@@ -83,6 +83,11 @@ assert_type(array[[True, False]], UncertainValue[NDArray[np.float64]])
 assert_type(array[np.array([True, False])], UncertainValue[NDArray[np.float64]])
 assert_type(array_quantity[(True, False)], Quantity[NDArray[np.float64]])
 array[[1, 0]]  # pyright: ignore[reportArgumentType, reportCallIssue]
+array[[True, False]] = scalar
+array[np.array([True, False])] = values
+array_quantity[[True, False]] = quantity
+scalar[[True]] = scalar  # pyright: ignore[reportIndexIssue]
+array_quantity[[True, False]] = 1.0  # pyright: ignore[reportArgumentType]
 assert_type(array_quantity[::-1], Quantity[NDArray[np.float64]])
 quantity.to("cm")  # pyright: ignore[reportArgumentType]
 Quantity(2.0, metre)  # pyright: ignore[reportArgumentType]
