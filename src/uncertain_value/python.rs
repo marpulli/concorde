@@ -208,6 +208,14 @@ impl PyUncertainValue {
         self.inner.is_independent()
     }
 
+    /// Standard deviation of the nominal values and its propagated uncertainty.
+    /// Uses N-ddof (population by default). Empty input, nonfinite values, invalid
+    /// ddof, or uncertain zero-spread data with undefined derivatives raise ValueError.
+    #[pyo3(signature = (ddof=0.0))]
+    fn std(&self, ddof: f64) -> PyResult<Self> {
+        Ok(Self { inner: self.inner.std(ddof).map_err(pyo3::exceptions::PyValueError::new_err)? })
+    }
+
     /// Arithmetic mean with correlated uncertainty. Empty arrays raise ValueError.
     fn mean(&self) -> PyResult<Self> {
         Ok(Self { inner: self.inner.mean().map_err(pyo3::exceptions::PyValueError::new_err)? })
