@@ -148,6 +148,14 @@ impl PyQuantity {
         Ok(Self { inner: Quantity::new(self.inner.value().mean().map_err(pyo3::exceptions::PyValueError::new_err)?, self.inner.unit().clone()) })
     }
 
+    /// Natural logarithm after converting to dimensionless units.
+    fn log(&self) -> PyResult<Self> {
+        let unit = crate::unit::Unit::new(Default::default());
+        let converted = self.inner.to(&unit)?;
+        let value = converted.value().log().map_err(pyo3::exceptions::PyValueError::new_err)?;
+        Ok(Self { inner: Quantity::new(value, unit) })
+    }
+
     /// Sum all elements in this unit. Absolute affine units cannot be summed.
     fn sum(&self) -> PyResult<Self> {
         self.inner.unit().check_multiplicative("sum")?;

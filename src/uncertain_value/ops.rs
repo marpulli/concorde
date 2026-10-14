@@ -341,6 +341,23 @@ impl UncertainValue {
         UncertainValue::from_computation(value, derivatives, self.source_uncertainties.clone())
     }
 
+    pub(crate) fn log(&self) -> Result<Self, &'static str> {
+        let valid = match &self.value {
+            ValueType::Scalar(v) => *v > 0.0,
+            ValueType::Array(v) => v.iter().all(|v| *v > 0.0),
+        };
+        if !valid { return Err("Logarithm requires positive values"); }
+        if let Some(elements) = &self.elements {
+            return elements.iter().map(Self::log).collect::<Result<Vec<_>, _>>().map(Self::from_elements);
+        }
+        let (value, gradient) = match &self.value {
+            ValueType::Scalar(v) => (ValueType::Scalar(v.ln()), ValueType::Scalar(1.0 / v)),
+            ValueType::Array(v) => (ValueType::Array(v.mapv(f64::ln).into_shared()), ValueType::Array(v.mapv(|v| 1.0/v).into_shared())),
+        };
+        let derivatives = self.derivatives.iter().map(|(id, d)| (*id, mul_value_types(d, &gradient))).collect();
+        Ok(Self::from_computation(value, derivatives, self.source_uncertainties.clone()))
+    }
+
     pub fn pow(&self, n: f64) -> UncertainValue {
         if let Some(elements) = &self.elements {
             return UncertainValue::from_elements(elements.iter().map(|e| e.pow(n)).collect());

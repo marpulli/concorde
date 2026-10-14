@@ -228,6 +228,11 @@ impl PyUncertainValue {
         Ok(Self { inner: self.inner.mean().map_err(pyo3::exceptions::PyValueError::new_err)? })
     }
 
+    /// Natural logarithm, preserving correlations. Requires strictly positive values.
+    fn log(&self) -> PyResult<Self> {
+        Ok(Self { inner: self.inner.log().map_err(pyo3::exceptions::PyValueError::new_err)? })
+    }
+
     /// Sum all elements, preserving shared-source correlations. Empty arrays sum to zero.
     fn sum(&self) -> Self {
         Self { inner: self.inner.sum() }
