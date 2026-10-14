@@ -113,6 +113,21 @@ impl PyQuantity {
         })
     }
 
+    /// Assign quantities through a boolean mask, converting to the target unit.
+    fn __setitem__(slf: &Bound<'_, Self>, mask: &Bound<'_, PyAny>, replacement: &Bound<'_, Self>) -> PyResult<()> {
+        let result = {
+            let current = slf.try_borrow()?;
+            let replacement = replacement.try_borrow()?;
+            let converted = replacement.inner.to(current.inner.unit())?;
+            Quantity::new(
+                crate::uncertain_value::assign_value(current.inner.value(), mask, converted.value())?,
+                current.inner.unit().clone(),
+            )
+        };
+        slf.try_borrow_mut()?.inner = result;
+        Ok(())
+    }
+
     /// Serialize this quantity's uncertainty sources and unit definitions.
     fn to_json(&self) -> PyResult<String> {
         self.inner.to_json().map_err(pyo3::exceptions::PyValueError::new_err)
