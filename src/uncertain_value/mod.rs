@@ -1,6 +1,7 @@
 mod ops;
 mod python;
 mod selection;
+mod reduction;
 mod serialization;
 
 use numpy::ndarray::ArcArray;

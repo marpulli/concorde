@@ -128,6 +128,12 @@ impl PyQuantity {
         Ok(())
     }
 
+    /// Sum all elements in this unit. Absolute affine units cannot be summed.
+    fn sum(&self) -> PyResult<Self> {
+        self.inner.unit().check_multiplicative("sum")?;
+        Ok(Self { inner: Quantity::new(self.inner.value().sum(), self.inner.unit().clone()) })
+    }
+
     /// Serialize this quantity's uncertainty sources and unit definitions.
     fn to_json(&self) -> PyResult<String> {
         self.inner.to_json().map_err(pyo3::exceptions::PyValueError::new_err)

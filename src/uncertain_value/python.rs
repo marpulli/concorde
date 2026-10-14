@@ -208,6 +208,11 @@ impl PyUncertainValue {
         self.inner.is_independent()
     }
 
+    /// Sum all elements, preserving shared-source correlations. Empty arrays sum to zero.
+    fn sum(&self) -> Self {
+        Self { inner: self.inner.sum() }
+    }
+
     /// Serialize finite values and their source dependencies as versioned JSON.
     fn to_json(&self) -> PyResult<String> {
         self.inner.to_json().map_err(pyo3::exceptions::PyValueError::new_err)
