@@ -148,6 +148,13 @@ impl PyQuantity {
         Ok(Self { inner: Quantity::new(self.inner.value().mean().map_err(pyo3::exceptions::PyValueError::new_err)?, self.inner.unit().clone()) })
     }
 
+    /// Square root of the value and unit, retaining uncertainty sources.
+    fn sqrt(&self) -> PyResult<Self> {
+        let unit = self.inner.unit().pow(0.5)?;
+        let value = self.inner.value().sqrt().map_err(pyo3::exceptions::PyValueError::new_err)?;
+        Ok(Self { inner: Quantity::new(value, unit) })
+    }
+
     /// Natural logarithm after converting to dimensionless units.
     fn log(&self) -> PyResult<Self> {
         let unit = crate::unit::Unit::new(Default::default());

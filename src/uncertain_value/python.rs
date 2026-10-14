@@ -228,6 +228,12 @@ impl PyUncertainValue {
         Ok(Self { inner: self.inner.mean().map_err(pyo3::exceptions::PyValueError::new_err)? })
     }
 
+    /// Square root with first-order uncertainty. Exact zero is supported;
+    /// uncertain zero and negative inputs have no valid finite derivative.
+    fn sqrt(&self) -> PyResult<Self> {
+        Ok(Self { inner: self.inner.sqrt().map_err(pyo3::exceptions::PyValueError::new_err)? })
+    }
+
     /// Natural logarithm, preserving correlations. Requires strictly positive values.
     fn log(&self) -> PyResult<Self> {
         Ok(Self { inner: self.inner.log().map_err(pyo3::exceptions::PyValueError::new_err)? })
