@@ -161,6 +161,16 @@ impl PyUncertainValue {
         self.inner.is_independent()
     }
 
+    /// Serialize finite values and their source dependencies as versioned JSON.
+    fn to_json(&self) -> PyResult<String> {
+        self.inner.to_json().map_err(pyo3::exceptions::PyValueError::new_err)
+    }
+
+    #[staticmethod]
+    fn from_json(json: &str) -> PyResult<Self> {
+        Ok(Self { inner: UncertainValue::from_json(json).map_err(pyo3::exceptions::PyValueError::new_err)? })
+    }
+
     /// Select an array element or slice, preserving its uncertainty sources.
     fn __getitem__(&self, index: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok(Self {
