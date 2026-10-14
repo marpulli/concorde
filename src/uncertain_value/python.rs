@@ -2,12 +2,19 @@ use super::{NumpyArray1D, UncertainValue, ValueType};
 use numpy::{PyArray1, PyArrayMethods, PyUntypedArray, PyUntypedArrayMethods};
 use pyo3::{IntoPyObjectExt, prelude::*};
 
-pub(crate) fn index_value(value: &UncertainValue, index: isize) -> PyResult<UncertainValue> {
+pub(crate) fn index_value(value: &UncertainValue, index: &Bound<'_, PyAny>) -> PyResult<UncertainValue> {
     let ValueType::Array(values) = &value.value else {
         return Err(pyo3::exceptions::PyTypeError::new_err(
             "Scalar values cannot be indexed",
         ));
     };
+    if let Ok(slice) = index.cast::<pyo3::types::PySlice>() {
+        use pyo3::types::PySliceMethods;
+        let slice = slice.indices(values.len() as isize)?;
+        let indices: Vec<_> = (0..slice.slicelength).map(|i| (slice.start + i as isize * slice.step) as usize).collect();
+        return Ok(value.select(&indices).expect("Validated slice indices"));
+    }
+    let index = index.extract::<isize>()?;
     let index = if index < 0 {
         values.len().checked_add_signed(index)
     } else {
@@ -154,8 +161,8 @@ impl PyUncertainValue {
         self.inner.is_independent()
     }
 
-    /// Select one array element, preserving its uncertainty sources.
-    fn __getitem__(&self, index: isize) -> PyResult<Self> {
+    /// Select an array element or slice, preserving its uncertainty sources.
+    fn __getitem__(&self, index: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok(Self {
             inner: index_value(&self.inner, index)?,
         })

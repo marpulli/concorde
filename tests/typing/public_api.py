@@ -74,7 +74,8 @@ assert_type(AffineUnitError(), AffineUnitError)
 # Unnecessary-ignore diagnostics make these negative checks fail if stubs loosen.
 scalar[0]  # pyright: ignore[reportIndexIssue]
 quantity[0]  # pyright: ignore[reportIndexIssue]
-array[:]  # pyright: ignore[reportArgumentType]
+assert_type(array[:], UncertainValue[NDArray[np.float64]])
+assert_type(array_quantity[::-1], Quantity[NDArray[np.float64]])
 quantity.to("cm")  # pyright: ignore[reportArgumentType]
 Quantity(2.0, metre)  # pyright: ignore[reportArgumentType]
 scalar.__add__(metre)  # pyright: ignore[reportArgumentType, reportCallIssue]

@@ -4,6 +4,13 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 impl ValueType {
+    pub(super) fn scalar(&self) -> f64 {
+        match self {
+            Self::Scalar(value) => *value,
+            Self::Array(_) => unreachable!("Internal scalar row invariant"),
+        }
+    }
+
     /// Select from a broadcast value, retaining scalar inputs unchanged.
     fn at(&self, index: usize) -> f64 {
         match self {
@@ -14,6 +21,41 @@ impl ValueType {
 }
 
 impl UncertainValue {
+    pub(super) fn from_elements(elements: Vec<Self>) -> Self {
+        let values = elements
+            .iter()
+            .map(|e| e.value.scalar())
+            .collect::<numpy::ndarray::Array1<_>>();
+        Self {
+            value: ValueType::Array(values.into_shared()),
+            elements: Some(elements.into()),
+            variable_id: None,
+            derivatives: HashMap::new(),
+            source_uncertainties: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn select(&self, indices: &[usize]) -> Option<Self> {
+        if matches!(self.value, ValueType::Scalar(_)) {
+            return None;
+        }
+        indices
+            .iter()
+            .map(|&i| self.element(i))
+            .collect::<Option<Vec<_>>>()
+            .map(Self::from_elements)
+    }
+
+    /// Select a broadcast operand for elementwise arithmetic.
+    pub(super) fn broadcast_element(&self, index: usize) -> Self {
+        match &self.value {
+            ValueType::Scalar(_) => self.clone(),
+            ValueType::Array(values) => self
+                .element(if values.len() == 1 { 0 } else { index })
+                .expect("Validated array shape"),
+        }
+    }
+
     /// Integer indexing preserves source identity, including the source coordinate.
     /// Different elements of an independent source array are independent; scalar
     /// sources broadcast across an array remain shared by all selected elements.
@@ -22,6 +64,9 @@ impl UncertainValue {
             return None;
         };
         let value = *values.get(index)?;
+        if let Some(elements) = &self.elements {
+            return elements.get(index).cloned();
+        }
         let mut derivatives = HashMap::new();
         let mut uncertainties = HashMap::new();
         for (source, derivative) in &self.derivatives {
