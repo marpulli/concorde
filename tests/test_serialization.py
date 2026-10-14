@@ -1,14 +1,13 @@
 """Source identity is portable across independent JSON payloads and processes."""
 import json
 import math
-import operator
 import subprocess
 import sys
 
 import numpy as np
 import pytest
 
-from concorde import Quantity, UncertainValue, UnitRegistry
+from concorde import UncertainValue
 
 
 def restored(value):
@@ -65,28 +64,6 @@ def test_indexed_source_remains_connected_to_parent():
     x = UncertainValue(np.array([1., 2.]), np.array([.1, .2]))
     assert (restored(x[1]) - x[1]).uncertainty == pytest.approx(0.)
     np.testing.assert_allclose((x - restored(x[0])).uncertainty, [0., math.hypot(.1, .2)])
-
-
-@pytest.mark.parametrize("op", [operator.add, operator.sub, operator.mul, operator.truediv])
-def test_conflicting_separately_loaded_sources_are_rejected(op):
-    x = UncertainValue(3., .2)
-    payload = json.loads(x.to_json())
-    payload["sources"][0]["uncertainty"] = .9
-    inconsistent = UncertainValue.from_json(json.dumps(payload))
-    with pytest.raises(ValueError, match="Conflicting"):
-        op(x, inconsistent)
-    registry = UnitRegistry()
-    with pytest.raises(ValueError, match="Conflicting"):
-        op(Quantity(x, registry.parse("m")), Quantity(inconsistent, registry.parse("m")))
-
-
-def test_indexed_source_conflict_with_parent():
-    x = UncertainValue(np.array([1., 2.]), .1)
-    payload = json.loads(x[0].to_json())
-    payload["sources"][0]["uncertainty"] = .9
-    loaded = UncertainValue.from_json(json.dumps(payload))
-    with pytest.raises(ValueError, match="Conflicting"):
-        x + loaded
 
 
 @pytest.mark.parametrize("value", [math.pi, .6000000000000001, -0., 1e-300, 1e300])

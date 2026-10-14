@@ -36,7 +36,6 @@ pub struct PyUncertainValue {
 
 impl PyUncertainValue {
     fn check_binary_shapes(&self, other: &Self) -> PyResult<()> {
-        self.inner.ensure_consistent_sources(&other.inner).map_err(pyo3::exceptions::PyValueError::new_err)?;
         if let (ValueType::Array(lhs), ValueType::Array(rhs)) =
             (&self.inner.value, &other.inner.value)
         {

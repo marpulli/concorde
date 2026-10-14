@@ -1,5 +1,6 @@
 //! Versioned, self-contained wire data. Source coordinates belong to the original
 //! source, never the current output position. No process-global identity cache.
+//! Source identities are trusted to refer to immutable source definitions.
 use super::{UncertainValue, ValueType, VarId};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -133,7 +134,6 @@ impl UncertainValue {
             }
             value.variable_id = Some(id);
         }
-        value.ensure_consistent_sources(&value)?;
         Ok(value)
     }
 

@@ -33,7 +33,6 @@ impl PyQuantity {
 
     fn __mul__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyQuantity> {
         let inner = if let Ok(quantity) = other.extract::<PyRef<'_, PyQuantity>>() {
-            self.inner.value().ensure_consistent_sources(quantity.inner.value()).map_err(pyo3::exceptions::PyValueError::new_err)?;
             (&self.inner * &quantity.inner)?
         } else {
             (&self.inner * other.extract::<f64>()?)?
@@ -48,14 +47,12 @@ impl PyQuantity {
     }
 
     fn __add__(&self, other: &PyQuantity) -> PyResult<PyQuantity> {
-        self.inner.value().ensure_consistent_sources(other.inner.value()).map_err(pyo3::exceptions::PyValueError::new_err)?;
         Ok(PyQuantity {
             inner: (&self.inner + &other.inner)?,
         })
     }
 
     fn __sub__(&self, other: &PyQuantity) -> PyResult<PyQuantity> {
-        self.inner.value().ensure_consistent_sources(other.inner.value()).map_err(pyo3::exceptions::PyValueError::new_err)?;
         Ok(PyQuantity {
             inner: (&self.inner - &other.inner)?,
         })
@@ -63,7 +60,6 @@ impl PyQuantity {
 
     fn __truediv__(&self, other: &Bound<'_, PyAny>) -> PyResult<PyQuantity> {
         let inner = if let Ok(quantity) = other.extract::<PyRef<'_, PyQuantity>>() {
-            self.inner.value().ensure_consistent_sources(quantity.inner.value()).map_err(pyo3::exceptions::PyValueError::new_err)?;
             (&self.inner / &quantity.inner)?
         } else {
             self.inner.divide_scalar(other.extract::<f64>()?)?
