@@ -1,3 +1,5 @@
+mod serialization;
+
 use crate::uncertain_value::UncertainValue;
 use crate::unit::{Unit, UnitError};
 use std::ops::{Add, Div, Mul, Sub};
